@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@source "../../../admin/**/*.php";
+@source "../js/admin/**/*.js";
+
+[x-cloak] {
+  display: none !important;
+}

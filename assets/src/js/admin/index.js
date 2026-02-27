@@ -1,3 +1,16 @@
+import Alpine from 'alpinejs';
+import registerNotifications from './modules/notifications';
+import apiIntegrationForm from './modules/api-integration-form';
+
+window.Alpine = Alpine;
+
+document.addEventListener('alpine:init', () => {
+  registerNotifications(Alpine);
+  Alpine.data('beApiIntegrationForm', apiIntegrationForm);
+});
+
+Alpine.start();
+
 (() => {
   const root = document.querySelector('.be-admin-screen');
   if (!root) {

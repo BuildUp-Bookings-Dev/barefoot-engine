@@ -5,13 +5,13 @@ if (!defined('ABSPATH')) {
 ?>
 <section class="be-panel be-panel-flush">
     <div class="be-table-head">
-        <h3 class="be-section-title">
-            <span class="material-symbols-outlined" aria-hidden="true">code</span>
+        <h3 class="be-section-title be-heading be-rows">
+            <span class="be-icon material-symbols-outlined" aria-hidden="true">code</span>
             <?php echo esc_html__('Shortcode Reference', 'barefoot-engine'); ?>
         </h3>
         <button class="be-link-button" type="button">
             <?php echo esc_html__('Copy All', 'barefoot-engine'); ?>
-            <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+            <span class="be-icon material-symbols-outlined" aria-hidden="true">content_copy</span>
         </button>
     </div>
 
@@ -53,23 +53,23 @@ if (!defined('ABSPATH')) {
 <section class="be-card-grid">
     <article class="be-mini-card">
         <div class="be-mini-icon is-warning">
-            <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+            <span class="be-icon material-symbols-outlined" aria-hidden="true">warning</span>
         </div>
-        <div>
-            <h3><?php echo esc_html__('Shortcodes not rendering?', 'barefoot-engine'); ?></h3>
-            <p><?php echo esc_html__('Ensure the plugin is active and that you are not wrapping the shortcode in pre tags within the Classic Editor.', 'barefoot-engine'); ?></p>
-            <a href="#"><?php echo esc_html__('Troubleshooting Guide', 'barefoot-engine'); ?></a>
+        <div class="be-columns">
+            <h3 class="be-mini-card-heading be-heading"><?php echo esc_html__('Shortcodes not rendering?', 'barefoot-engine'); ?></h3>
+            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Ensure the plugin is active and that you are not wrapping the shortcode in pre tags within the Classic Editor.', 'barefoot-engine'); ?></p>
+            <a class="be-mini-card-link be-link" href="#"><?php echo esc_html__('Troubleshooting Guide', 'barefoot-engine'); ?></a>
         </div>
     </article>
 
     <article class="be-mini-card">
         <div class="be-mini-icon is-success">
-            <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
+            <span class="be-icon material-symbols-outlined" aria-hidden="true">terminal</span>
         </div>
-        <div>
-            <h3><?php echo esc_html__('Developer API', 'barefoot-engine'); ?></h3>
-            <p><?php echo esc_html__('Need more control? You can use our PHP functions directly in your theme template files.', 'barefoot-engine'); ?></p>
-            <a href="#"><?php echo esc_html__('View Function Reference', 'barefoot-engine'); ?></a>
+        <div class="be-columns">
+            <h3 class="be-mini-card-heading be-heading"><?php echo esc_html__('Developer API', 'barefoot-engine'); ?></h3>
+            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Need more control? You can use our PHP functions directly in your theme template files.', 'barefoot-engine'); ?></p>
+            <a class="be-mini-card-link be-link" href="#"><?php echo esc_html__('View Function Reference', 'barefoot-engine'); ?></a>
         </div>
     </article>
 </section>

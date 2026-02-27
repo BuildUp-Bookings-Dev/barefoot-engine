@@ -9,6 +9,7 @@ if (!isset($tabs, $active_tab, $active_slug, $active_template, $components_dir))
 
 $sidebar_view = $components_dir . 'sidebar.php';
 $header_view = $components_dir . 'header.php';
+$notifications_view = $components_dir . 'notifications.php';
 ?>
 <div class="be-admin-screen">
     <div class="be-admin-layout">
@@ -20,6 +21,10 @@ $header_view = $components_dir . 'header.php';
             <div class="be-admin-container">
                 <?php if (file_exists($header_view)) : ?>
                     <?php include $header_view; ?>
+                <?php endif; ?>
+
+                <?php if (file_exists($notifications_view)) : ?>
+                    <?php include $notifications_view; ?>
                 <?php endif; ?>
 
                 <?php if (file_exists($active_template)) : ?>

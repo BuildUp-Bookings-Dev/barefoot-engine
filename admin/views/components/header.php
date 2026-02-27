@@ -8,6 +8,6 @@ if (!isset($active_tab) || !is_array($active_tab)) {
 }
 ?>
 <header class="be-admin-header">
-    <h1 class="be-admin-title"><?php echo esc_html((string) $active_tab['title']); ?></h1>
-    <p class="be-admin-subtitle"><?php echo esc_html((string) $active_tab['subtitle']); ?></p>
+    <h1 class="be-admin-title be-heading"><?php echo esc_html((string) $active_tab['title']); ?></h1>
+    <p class="be-admin-subtitle be-paragraph"><?php echo esc_html((string) $active_tab['subtitle']); ?></p>
 </header>

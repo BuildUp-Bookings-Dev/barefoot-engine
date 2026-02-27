@@ -13,6 +13,7 @@ export default defineConfig({
         'admin-script': path.resolve(__dirname, 'assets/src/js/admin/index.js'),
         'public-script': path.resolve(__dirname, 'assets/src/js/public/index.js'),
         'admin-style': path.resolve(__dirname, 'assets/src/scss/admin/index.scss'),
+        'admin-tailwind-style': path.resolve(__dirname, 'assets/src/css/admin-tailwind.css'),
         'public-style': path.resolve(__dirname, 'assets/src/scss/public/index.scss')
       },
       output: {

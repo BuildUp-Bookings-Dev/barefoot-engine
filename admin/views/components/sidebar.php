@@ -24,7 +24,7 @@ if (!isset($tabs, $active_slug) || !is_array($tabs)) {
                 $link_classes = 'be-admin-nav-link' . ($is_active ? ' is-active' : '');
                 $icon_classes = 'material-symbols-outlined be-admin-nav-icon' . ($is_active ? ' is-filled' : '');
                 ?>
-                <a class="<?php echo esc_attr($link_classes); ?>" href="<?php echo esc_url((string) $tab['url']); ?>">
+                <a class="be-link be-rows <?php echo esc_attr($link_classes); ?>" href="<?php echo esc_url((string) $tab['url']); ?>">
                     <span class="<?php echo esc_attr($icon_classes); ?>" aria-hidden="true"><?php echo esc_html((string) $tab['icon']); ?></span>
                     <span class="be-admin-nav-label"><?php echo esc_html((string) $tab['label']); ?></span>
                 </a>

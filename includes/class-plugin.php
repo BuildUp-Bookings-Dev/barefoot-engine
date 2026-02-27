@@ -5,6 +5,8 @@ namespace BarefootEngine\Includes;
 use BarefootEngine\Admin\Admin;
 use BarefootEngine\PublicFacing\Public_Facing;
 use BarefootEngine\Integrations\Github_Updater;
+use BarefootEngine\REST\Api_Integration_Controller;
+use BarefootEngine\Services\Api_Integration_Settings;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -19,6 +21,7 @@ class Plugin
         $this->loader = new Loader();
         $this->define_admin_hooks();
         $this->define_public_hooks();
+        $this->define_rest_hooks();
         $this->define_integration_hooks();
     }
 
@@ -35,6 +38,14 @@ class Plugin
         $public = new Public_Facing();
 
         $this->loader->add_action('wp_enqueue_scripts', $public, 'enqueue_assets');
+    }
+
+    private function define_rest_hooks(): void
+    {
+        $settings = new Api_Integration_Settings();
+        $controller = new Api_Integration_Controller($settings);
+
+        $this->loader->add_action('rest_api_init', $controller, 'register_routes', 10, 0);
     }
 
     private function define_integration_hooks(): void
