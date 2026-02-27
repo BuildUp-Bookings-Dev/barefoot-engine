@@ -7,8 +7,10 @@ use BarefootEngine\PublicFacing\Public_Facing;
 use BarefootEngine\Integrations\Github_Updater;
 use BarefootEngine\REST\Api_Integration_Controller;
 use BarefootEngine\REST\General_Settings_Controller;
+use BarefootEngine\REST\Updates_Controller;
 use BarefootEngine\Services\Api_Integration_Settings;
 use BarefootEngine\Services\General_Settings;
+use BarefootEngine\Services\Updates_Service;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -49,9 +51,12 @@ class Plugin
         $controller = new Api_Integration_Controller($settings);
         $general_settings = new General_Settings();
         $general_controller = new General_Settings_Controller($general_settings);
+        $updates_service = new Updates_Service();
+        $updates_controller = new Updates_Controller($updates_service);
 
         $this->loader->add_action('rest_api_init', $controller, 'register_routes', 10, 0);
         $this->loader->add_action('rest_api_init', $general_controller, 'register_routes', 10, 0);
+        $this->loader->add_action('rest_api_init', $updates_controller, 'register_routes', 10, 0);
     }
 
     private function define_integration_hooks(): void

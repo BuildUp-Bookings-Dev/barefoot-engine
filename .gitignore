@@ -8,3 +8,4 @@ dist/*
 .npm/
 .DS_Store
 sample
+.playwright-cli/

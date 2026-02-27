@@ -2,10 +2,8 @@
 .gitignore
 .distignore
 node_modules
-libraries/vendor
 assets/src
-assets/dist
-dist
+/dist
 .build
 scripts
 tests

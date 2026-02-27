@@ -856,6 +856,18 @@ $be-border: #e2e8f0;
   color: $be-primary;
 }
 
+.be-release-excerpt {
+  margin: 0;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.be-release-link-wrap {
+  margin: 0;
+}
+
 .be-info-box {
   max-width: 760px;
   padding: 16px;

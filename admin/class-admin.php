@@ -102,6 +102,13 @@ class Admin
                     'restBase' => esc_url_raw(rest_url('barefoot-engine/v1/')),
                     'restNonce' => wp_create_nonce('wp_rest'),
                     'activeTab' => $active_tab,
+                    'pluginVersion' => BAREFOOT_ENGINE_VERSION,
+                    'updatesConfig' => [
+                        'statusEndpoint' => 'updates/status',
+                        'checkEndpoint' => 'updates/check',
+                        'releasesEndpoint' => 'updates/releases',
+                        'repository' => BAREFOOT_ENGINE_GITHUB_REPOSITORY,
+                    ],
                     'apiIntegration' => $this->api_integration_settings->get_public_settings(),
                     'generalSettings' => $this->general_settings->get_public_settings(),
                     'generalFontKit' => $this->general_settings->get_font_options(),
