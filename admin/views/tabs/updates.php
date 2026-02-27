@@ -55,7 +55,27 @@ if (!defined('ABSPATH')) {
                         <span class="be-badge be-badge-neutral" x-text="release.prerelease ? '<?php echo esc_attr__('Prerelease', 'barefoot-engine'); ?>' : '<?php echo esc_attr__('Release', 'barefoot-engine'); ?>'"></span>
                     </div>
 
-                    <p class="be-release-excerpt be-paragraph" x-text="release.bodyExcerpt"></p>
+                    <div class="be-release-notes be-columns">
+                        <template x-for="(block, blockIndex) in release.notesBlocks" :key="`${release.tagName}-note-${blockIndex}`">
+                            <div>
+                                <template x-if="block.type === 'heading'">
+                                    <h4 class="be-release-heading be-heading" x-text="block.text"></h4>
+                                </template>
+
+                                <template x-if="block.type === 'paragraph'">
+                                    <p class="be-release-excerpt be-paragraph" x-text="block.text"></p>
+                                </template>
+
+                                <template x-if="block.type === 'list'">
+                                    <ul class="be-release-list be-columns">
+                                        <template x-for="(item, itemIndex) in block.items" :key="`${release.tagName}-note-${blockIndex}-item-${itemIndex}`">
+                                            <li class="be-release-list-item be-paragraph" x-text="item"></li>
+                                        </template>
+                                    </ul>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
 
                     <p class="be-release-link-wrap be-paragraph" x-show="release.url" x-cloak>
                         <a class="be-link be-mini-card-link" :href="release.url" target="_blank" rel="noopener noreferrer">

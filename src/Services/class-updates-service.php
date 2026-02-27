@@ -19,22 +19,19 @@ class Updates_Service
      */
     public function get_status(): array|WP_Error
     {
-        $update_offer = $this->get_update_offer();
         $releases = $this->get_recent_releases();
         if (is_wp_error($releases)) {
             return $releases;
         }
 
-        $latest_version = is_array($update_offer) && isset($update_offer['new_version']) && is_string($update_offer['new_version'])
-            ? $this->normalize_version($update_offer['new_version'])
-            : '';
-
-        if ($latest_version === '' && !empty($releases)) {
-            $latest_version = $this->normalize_version((string) ($releases[0]['tag_name'] ?? ''));
-        }
+        $latest_version = $this->get_latest_version_from_releases($releases);
 
         $current_version = $this->normalize_version(BAREFOOT_ENGINE_VERSION);
-        $has_update = $latest_version !== '' && version_compare($latest_version, $current_version, '>');
+        if ($latest_version === '') {
+            $latest_version = $current_version;
+        }
+
+        $has_update = version_compare($latest_version, $current_version, '>');
         $last_checked = $this->get_last_checked_at();
 
         return [
@@ -63,14 +60,17 @@ class Updates_Service
         wp_update_plugins();
 
         $this->clear_release_cache();
-        $status = $this->get_status();
-        if (is_wp_error($status)) {
-            return $status;
-        }
-
         $releases = $this->get_recent_releases(true);
         if (is_wp_error($releases)) {
             return $releases;
+        }
+
+        $latest_version = $this->get_latest_version_from_releases($releases);
+        $this->purge_stale_plugin_update_offer($latest_version);
+
+        $status = $this->get_status();
+        if (is_wp_error($status)) {
+            return $status;
         }
 
         return [
@@ -198,24 +198,6 @@ class Updates_Service
         return $releases;
     }
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function get_update_offer(): ?array
-    {
-        $transient = get_site_transient('update_plugins');
-        if (!is_object($transient) || !isset($transient->response) || !is_array($transient->response)) {
-            return null;
-        }
-
-        $response_item = $transient->response[BAREFOOT_ENGINE_PLUGIN_BASENAME] ?? null;
-        if (is_object($response_item)) {
-            $response_item = (array) $response_item;
-        }
-
-        return is_array($response_item) ? $response_item : null;
-    }
-
     private function get_last_checked_at(): int
     {
         $transient = get_site_transient('update_plugins');
@@ -256,6 +238,60 @@ class Updates_Service
         }
 
         return preg_replace('/[^0-9A-Za-z.\-_]/', '', $normalized) ?? '';
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $releases
+     */
+    private function get_latest_version_from_releases(array $releases): string
+    {
+        if (empty($releases)) {
+            return '';
+        }
+
+        $first = $releases[0];
+        if (!is_array($first)) {
+            return '';
+        }
+
+        $tag_name = isset($first['tag_name']) && is_string($first['tag_name']) ? $first['tag_name'] : '';
+
+        return $this->normalize_version($tag_name);
+    }
+
+    private function purge_stale_plugin_update_offer(string $latest_github_version): void
+    {
+        $transient = get_site_transient('update_plugins');
+        if (!is_object($transient) || !isset($transient->response) || !is_array($transient->response)) {
+            return;
+        }
+
+        $entry = $transient->response[BAREFOOT_ENGINE_PLUGIN_BASENAME] ?? null;
+        if ($entry === null) {
+            return;
+        }
+
+        if (is_object($entry)) {
+            $entry = (array) $entry;
+        }
+
+        if (!is_array($entry)) {
+            unset($transient->response[BAREFOOT_ENGINE_PLUGIN_BASENAME]);
+            set_site_transient('update_plugins', $transient);
+            return;
+        }
+
+        $entry_version = isset($entry['new_version']) && is_string($entry['new_version'])
+            ? $this->normalize_version($entry['new_version'])
+            : '';
+
+        $should_purge = $latest_github_version === '' ||
+            ($entry_version !== '' && version_compare($entry_version, $latest_github_version, '>'));
+
+        if ($should_purge) {
+            unset($transient->response[BAREFOOT_ENGINE_PLUGIN_BASENAME]);
+            set_site_transient('update_plugins', $transient);
+        }
     }
 
     /**

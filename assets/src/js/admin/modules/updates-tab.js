@@ -115,6 +115,87 @@ const formatDate = (value) => {
   }).format(date);
 };
 
+const parseReleaseNotes = (markdown) => {
+  if (typeof markdown !== 'string' || markdown.trim() === '') {
+    return [
+      {
+        type: 'paragraph',
+        text: 'No release notes provided.',
+      },
+    ];
+  }
+
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const blocks = [];
+  let listItems = [];
+  let paragraphBuffer = [];
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      blocks.push({
+        type: 'list',
+        items: [...listItems],
+      });
+      listItems = [];
+    }
+  };
+
+  const flushParagraph = () => {
+    if (paragraphBuffer.length > 0) {
+      blocks.push({
+        type: 'paragraph',
+        text: paragraphBuffer.join(' ').trim(),
+      });
+      paragraphBuffer = [];
+    }
+  };
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+
+    if (line === '') {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    const headingMatch = line.match(/^###\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push({
+        type: 'heading',
+        text: headingMatch[1].trim(),
+      });
+      return;
+    }
+
+    const listMatch = line.match(/^-\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      listItems.push(listMatch[1].trim());
+      return;
+    }
+
+    flushList();
+    paragraphBuffer.push(line);
+  });
+
+  flushParagraph();
+  flushList();
+
+  if (blocks.length === 0) {
+    return [
+      {
+        type: 'paragraph',
+        text: 'No release notes provided.',
+      },
+    ];
+  }
+
+  return blocks;
+};
+
 const normalizeStatus = (payload) => {
   const data = payload && payload.data && typeof payload.data === 'object' ? payload.data : {};
   const bootstrap = getBootstrapData();
@@ -177,6 +258,11 @@ const normalizeRelease = (release) => {
       release && typeof release.body_excerpt === 'string' && release.body_excerpt !== ''
         ? release.body_excerpt
         : 'No release notes provided.',
+    notesBlocks: parseReleaseNotes(
+      release && typeof release.body_excerpt === 'string' && release.body_excerpt !== ''
+        ? release.body_excerpt
+        : 'No release notes provided.'
+    ),
   };
 };
 
