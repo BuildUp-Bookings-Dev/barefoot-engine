@@ -19,20 +19,26 @@ class Github_Updater
             return;
         }
 
-        $repository = apply_filters('barefoot_engine_updater_repository', BAREFOOT_ENGINE_GITHUB_REPOSITORY);
-        $branch = apply_filters('barefoot_engine_updater_branch', BAREFOOT_ENGINE_GITHUB_BRANCH);
+        $repository = (string) apply_filters('barefoot_engine_updater_repository', BAREFOOT_ENGINE_GITHUB_REPOSITORY);
+        $branch = (string) apply_filters('barefoot_engine_updater_branch', BAREFOOT_ENGINE_GITHUB_BRANCH);
+        $token = (string) apply_filters('barefoot_engine_updater_token', '');
+        $asset_regex = (string) apply_filters('barefoot_engine_updater_asset_regex', '/\\.zip($|[?&#])/i');
 
         $updater = PucFactory::buildUpdateChecker(
-            (string) $repository,
+            $repository,
             BAREFOOT_ENGINE_PLUGIN_FILE,
             'barefoot-engine'
         );
 
-        $updater->setBranch((string) $branch);
+        $updater->setBranch($branch);
+
+        if ($token !== '') {
+            $updater->setAuthentication($token);
+        }
 
         $vcs_api = $updater->getVcsApi();
         if (is_object($vcs_api) && method_exists($vcs_api, 'enableReleaseAssets')) {
-            $vcs_api->enableReleaseAssets();
+            $vcs_api->enableReleaseAssets($asset_regex);
         }
     }
 }
