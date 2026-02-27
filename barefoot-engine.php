@@ -3,7 +3,7 @@
  * Plugin Name: Barefoot Engine
  * Plugin URI:  http://braudyp.dev/
  * Description: Barefoot API full vacation rental integration.
- * Version:     0.1.0
+ * Version:     0.1.1
  * Author:      Braudy Pedrosa
  * Author URI:  https://buildupbookings.com/
  * Text Domain: barefoot-engine
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('BAREFOOT_ENGINE_VERSION', '0.1.0');
+define('BAREFOOT_ENGINE_VERSION', '0.1.1');
 define('BAREFOOT_ENGINE_PLUGIN_FILE', __FILE__);
 define('BAREFOOT_ENGINE_PLUGIN_BASENAME', plugin_basename(__FILE__));
 define('BAREFOOT_ENGINE_PLUGIN_DIR', plugin_dir_path(__FILE__));
