@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Test release 0.1.2 for updater verification in WordPress admin.
 
 ### Changed
 
