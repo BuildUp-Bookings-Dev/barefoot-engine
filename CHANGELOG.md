@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [0.1.2] - 2026-02-27
+
+### Added
 - Test release 0.1.2 for updater verification in WordPress admin.
 
 ### Changed
