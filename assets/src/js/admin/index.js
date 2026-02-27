@@ -1,12 +1,14 @@
 import Alpine from 'alpinejs';
 import registerNotifications from './modules/notifications';
 import apiIntegrationForm from './modules/api-integration-form';
+import generalSettingsForm from './modules/general-settings-form';
 
 window.Alpine = Alpine;
 
 document.addEventListener('alpine:init', () => {
   registerNotifications(Alpine);
   Alpine.data('beApiIntegrationForm', apiIntegrationForm);
+  Alpine.data('beGeneralSettingsForm', generalSettingsForm);
 });
 
 Alpine.start();

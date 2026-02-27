@@ -248,6 +248,36 @@ $be-border: #e2e8f0;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.be-typography-rows {
+  gap: 16px;
+}
+
+.be-typography-row {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 16px;
+  gap: 14px;
+}
+
+.be-typography-row-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: $be-text-main;
+}
+
+.be-typography-row-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.be-typography-control {
+  min-width: 0;
+}
+
 .be-field-label {
   color: #334155;
   font-size: 14px;
@@ -264,6 +294,118 @@ $be-border: #e2e8f0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
   color: #475569;
+}
+
+.be-toggle-control {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.be-toggle-input {
+  position: absolute;
+  opacity: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  pointer-events: none;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.be-toggle-track {
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  transition: background-color 0.2s ease;
+}
+
+.be-toggle-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+.be-toggle-input:checked + .be-toggle-track {
+  background: #2563eb;
+}
+
+.be-toggle-input:checked + .be-toggle-track .be-toggle-thumb {
+  transform: translateX(20px);
+}
+
+.be-toggle-input:focus-visible + .be-toggle-track {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+}
+
+.be-toggle-state {
+  text-transform: lowercase;
+}
+
+.be-settings-separator {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.be-range-value {
+  min-width: 52px;
+  text-align: right;
+}
+
+.be-range-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.be-range-input {
+  width: 100%;
+  height: 8px;
+  appearance: none;
+  border-radius: 999px;
+  background: #e2e8f0;
+  outline: none;
+}
+
+.be-range-input::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 0;
+  background: #2563eb;
+}
+
+.be-range-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 0;
+  background: #2563eb;
+}
+
+.be-inherit-toggle-wrap {
+  gap: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.be-checkbox {
+  margin: 0;
 }
 
 .be-field input[type="text"],
@@ -284,6 +426,7 @@ $be-border: #e2e8f0;
   color: $be-text-main;
   padding: 12px 14px;
   font-size: 14px;
+  max-width: 100%;
 }
 
 .be-field input:focus,
@@ -292,6 +435,13 @@ $be-border: #e2e8f0;
   border-color: rgba($be-primary, 0.65);
   box-shadow: 0 0 0 3px rgba($be-primary, 0.12);
   outline: 0;
+}
+
+.be-field input:disabled,
+.be-field select:disabled,
+.be-field textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .be-field textarea {
@@ -909,6 +1059,10 @@ $be-border: #e2e8f0;
   .be-field-grid,
   .be-color-grid,
   .be-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .be-typography-row-controls {
     grid-template-columns: 1fr;
   }
 

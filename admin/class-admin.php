@@ -4,6 +4,7 @@ namespace BarefootEngine\Admin;
 
 use BarefootEngine\Includes\Helpers\Manifest;
 use BarefootEngine\Services\Api_Integration_Settings;
+use BarefootEngine\Services\General_Settings;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -15,11 +16,13 @@ class Admin
 
     private Manifest $manifest;
     private Api_Integration_Settings $api_integration_settings;
+    private General_Settings $general_settings;
 
     public function __construct()
     {
         $this->manifest = new Manifest();
         $this->api_integration_settings = new Api_Integration_Settings();
+        $this->general_settings = new General_Settings();
     }
 
     public function register_menu(): void
@@ -100,6 +103,13 @@ class Admin
                     'restNonce' => wp_create_nonce('wp_rest'),
                     'activeTab' => $active_tab,
                     'apiIntegration' => $this->api_integration_settings->get_public_settings(),
+                    'generalSettings' => $this->general_settings->get_public_settings(),
+                    'generalFontKit' => $this->general_settings->get_font_options(),
+                    'generalConfig' => [
+                        'min' => General_Settings::FONT_SIZE_MIN,
+                        'max' => General_Settings::FONT_SIZE_MAX,
+                        'step' => General_Settings::FONT_SIZE_STEP,
+                    ],
                 ]
             );
         }
