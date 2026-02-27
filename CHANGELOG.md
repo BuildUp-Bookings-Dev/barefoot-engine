@@ -5,27 +5,6 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-
-### Changed
-
-### Fixed
-
-### Security
-
-## [0.1.2] - 2026-02-27
-
-### Added
-- Test release 0.1.2 for updater verification in WordPress admin.
-
-### Changed
-
-### Fixed
-
-### Security
-
-## [0.1.1] - 2026-02-27
-
-### Added
 - Added a functional `Updates` admin tab backed by REST and Alpine for live version/release visibility.
 - Added changelog automation script (`scripts/changelog.mjs`) to validate, promote, and extract release notes.
 - Added release convenience scripts (`release:patch`, `release:minor`, `release:major`) and changelog validation command.
