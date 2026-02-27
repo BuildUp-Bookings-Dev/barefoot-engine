@@ -1,0 +1,16 @@
+{
+  "name": "barefoot-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Barefoot Engine WordPress plugin scaffold",
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch",
+    "package": "node ./scripts/package.mjs",
+    "release": "node ./scripts/release.mjs patch"
+  },
+  "devDependencies": {
+    "sass": "^1.77.8",
+    "vite": "^5.4.2"
+  }
+}

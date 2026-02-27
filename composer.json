@@ -1,0 +1,16 @@
+{
+  "name": "braudypedrosa/barefoot-engine",
+  "description": "Barefoot API vacation rental integration plugin scaffold",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "version": "0.1.0",
+  "require": {
+    "php": "^8.1",
+    "yahnis-elsts/plugin-update-checker": "^5.6"
+  },
+  "config": {
+    "vendor-dir": "libraries/vendor",
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}

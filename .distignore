@@ -1,0 +1,15 @@
+.git
+.gitignore
+.distignore
+node_modules
+libraries/vendor
+assets/src
+assets/dist
+dist
+.build
+scripts
+tests
+phpcs.xml.dist
+vite.config.js
+npm-debug.log
+.DS_Store

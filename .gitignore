@@ -1,0 +1,9 @@
+node_modules/
+libraries/vendor/
+assets/dist/*
+!assets/dist/.gitkeep
+dist/*
+!dist/.gitkeep
+.build/
+.npm/
+.DS_Store
