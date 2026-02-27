@@ -7,3 +7,4 @@ dist/*
 .build/
 .npm/
 .DS_Store
+sample
