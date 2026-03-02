@@ -1,7 +1,12 @@
-(function () {
-  if (!window.console) {
-    return;
+import '@braudypedrosa/bp-listings';
+import { BPCalendar, BP_Calendar } from '@braudypedrosa/bp-calendar';
+
+if (typeof window !== 'undefined') {
+  if (!window.BPCalendar) {
+    window.BPCalendar = BPCalendar;
   }
 
-  console.log('Barefoot Engine public bundle loaded.');
-})();
+  if (!window.BP_Calendar) {
+    window.BP_Calendar = BP_Calendar;
+  }
+}

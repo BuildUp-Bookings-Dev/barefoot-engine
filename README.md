@@ -88,3 +88,19 @@ Updater constants in `barefoot-engine.php`:
 Composer vendor directory is isolated at:
 
 - `libraries/vendor`
+
+Widget JS libraries are installed from GitHub tags through npm:
+
+- `@braudypedrosa/bp-calendar` (`v1.0.0`)
+- `@braudypedrosa/bp-listings` (`v1.0.0`)
+
+Edit widget source in their own repositories (not in this plugin):
+
+- [bp-calendar](https://github.com/braudypedrosa/bp-calendar)
+- [bp-listings](https://github.com/braudypedrosa/bp-listings)
+
+To update widget versions in this plugin:
+
+1. Release/tag a new version in each library repo.
+2. Update versions in `package.json`.
+3. Run `npm install` and `npm run build`.
