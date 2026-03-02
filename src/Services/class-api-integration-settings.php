@@ -25,9 +25,9 @@ class Api_Integration_Settings
 
         return [
             'api' => [
-                'username' => $this->sanitize_scalar($api['username'] ?? $defaults['api']['username']),
-                'password' => $this->sanitize_scalar($api['password'] ?? $defaults['api']['password']),
-                'company_id' => $this->sanitize_scalar($api['company_id'] ?? $defaults['api']['company_id']),
+                'username' => $this->sanitize_identifier($api['username'] ?? $defaults['api']['username']),
+                'password' => $this->sanitize_secret($api['password'] ?? $defaults['api']['password']),
+                'company_id' => $this->sanitize_identifier($api['company_id'] ?? $defaults['api']['company_id']),
             ],
         ];
     }
@@ -45,17 +45,17 @@ class Api_Integration_Settings
             $api_payload = $payload['api'];
         }
 
-        $username = $this->sanitize_scalar($api_payload['username'] ?? $current['api']['username']);
-        $company_id = $this->sanitize_scalar($api_payload['company_id'] ?? $current['api']['company_id']);
+        $username = $this->sanitize_identifier($api_payload['username'] ?? $current['api']['username']);
+        $company_id = $this->sanitize_identifier($api_payload['company_id'] ?? $current['api']['company_id']);
         $password_input = '';
 
         if (isset($api_payload['password']) && is_scalar($api_payload['password'])) {
-            $password_input = trim((string) $api_payload['password']);
+            $password_input = (string) $api_payload['password'];
         }
 
         $password = $current['api']['password'];
         if ($password_input !== '') {
-            $password = $this->sanitize_scalar($password_input);
+            $password = $this->sanitize_secret($password_input);
         }
 
         $settings = [
@@ -128,12 +128,24 @@ class Api_Integration_Settings
         ];
     }
 
-    private function sanitize_scalar(mixed $value): string
+    private function sanitize_identifier(mixed $value): string
     {
         if (!is_scalar($value)) {
             return '';
         }
 
         return sanitize_text_field(trim((string) $value));
+    }
+
+    private function sanitize_secret(mixed $value): string
+    {
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $string = wp_check_invalid_utf8((string) $value);
+        $string = str_replace("\0", '', $string);
+
+        return preg_replace('/[\r\n]+/', '', $string) ?? '';
     }
 }

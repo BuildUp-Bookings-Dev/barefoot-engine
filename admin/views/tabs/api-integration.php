@@ -39,20 +39,20 @@ if (!defined('ABSPATH')) {
         </label>
 
         <label class="be-field be-label be-columns">
-            <span class="be-field-label be-label-text"><?php echo esc_html__('Company ID', 'barefoot-engine'); ?></span>
+            <span class="be-field-label be-label-text"><?php echo esc_html__('Barefoot Account / Portal ID', 'barefoot-engine'); ?></span>
             <span class="be-input-wrap be-rows">
                 <span class="be-icon material-symbols-outlined" aria-hidden="true">business</span>
                 <input
                     type="text"
                     x-model.trim="api.company_id"
                     @input="clearFieldError('company_id')"
-                    placeholder="<?php echo esc_attr__('e.g. COMP-12345', 'barefoot-engine'); ?>"
+                    placeholder="<?php echo esc_attr__('e.g. v3ccln0929', 'barefoot-engine'); ?>"
                 />
             </span>
             <template x-if="fieldErrors.company_id">
                 <span class="be-field-help be-field-help-error" x-text="fieldErrors.company_id"></span>
             </template>
-            <span class="be-field-help"><?php echo esc_html__('Your unique company identifier provided in the developer dashboard.', 'barefoot-engine'); ?></span>
+            <span class="be-field-help"><?php echo esc_html__('Barefoot calls this value barefootAccount in the web service and portalid in older docs.', 'barefoot-engine'); ?></span>
         </label>
     </form>
 

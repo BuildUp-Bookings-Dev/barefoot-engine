@@ -3,6 +3,7 @@
 namespace BarefootEngine\Admin;
 
 use BarefootEngine\Includes\Helpers\Manifest;
+use BarefootEngine\Properties\Property_Post_Type;
 use BarefootEngine\Services\Api_Integration_Settings;
 use BarefootEngine\Services\General_Settings;
 
@@ -36,6 +37,23 @@ class Admin
             'dashicons-admin-home',
             56
         );
+
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Settings', 'barefoot-engine'),
+            __('Settings', 'barefoot-engine'),
+            'manage_options',
+            self::MENU_SLUG,
+            [$this, 'render_page']
+        );
+
+        add_submenu_page(
+            self::MENU_SLUG,
+            __('Properties', 'barefoot-engine'),
+            __('Properties', 'barefoot-engine'),
+            'manage_options',
+            'edit.php?post_type=' . Property_Post_Type::POST_TYPE
+        );
     }
 
     public function render_page(): void
@@ -61,7 +79,12 @@ class Admin
 
     public function enqueue_assets(string $hook_suffix): void
     {
-        if ($hook_suffix !== 'toplevel_page_' . self::MENU_SLUG) {
+        $allowed_hooks = [
+            'toplevel_page_' . self::MENU_SLUG,
+            self::MENU_SLUG . '_page_' . self::MENU_SLUG,
+        ];
+
+        if (!in_array($hook_suffix, $allowed_hooks, true)) {
             return;
         }
 
@@ -108,6 +131,11 @@ class Admin
                         'checkEndpoint' => 'updates/check',
                         'releasesEndpoint' => 'updates/releases',
                         'repository' => BAREFOOT_ENGINE_GITHUB_REPOSITORY,
+                    ],
+                    'propertiesConfig' => [
+                        'settingsEndpoint' => 'properties/settings',
+                        'aliasesEndpoint' => 'properties/aliases',
+                        'syncEndpoint' => 'properties/sync',
                     ],
                     'apiIntegration' => $this->api_integration_settings->get_public_settings(),
                     'generalSettings' => $this->general_settings->get_public_settings(),
@@ -161,6 +189,14 @@ class Admin
                 'title' => __('API Integration', 'barefoot-engine'),
                 'subtitle' => __('Configure your API credentials to synchronize data securely with your Barefoot API.', 'barefoot-engine'),
                 'template' => 'api-integration.php',
+            ],
+            'properties' => [
+                'slug' => 'properties',
+                'label' => __('Properties', 'barefoot-engine'),
+                'icon' => 'apartment',
+                'title' => __('Properties', 'barefoot-engine'),
+                'subtitle' => __('Import Barefoot properties, review sync status, and manage field aliases.', 'barefoot-engine'),
+                'template' => 'properties.php',
             ],
             'updates' => [
                 'slug' => 'updates',

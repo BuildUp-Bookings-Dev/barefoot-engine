@@ -2,6 +2,7 @@
 
 namespace BarefootEngine\REST;
 
+use BarefootEngine\Services\Barefoot_Api_Client;
 use BarefootEngine\Services\Api_Integration_Settings;
 use WP_Error;
 use WP_REST_Request;
@@ -18,10 +19,12 @@ class Api_Integration_Controller
     private const REST_BASE = 'api-integration';
 
     private Api_Integration_Settings $settings;
+    private Barefoot_Api_Client $api_client;
 
-    public function __construct(?Api_Integration_Settings $settings = null)
+    public function __construct(?Api_Integration_Settings $settings = null, ?Barefoot_Api_Client $api_client = null)
     {
         $this->settings = $settings ?? new Api_Integration_Settings();
+        $this->api_client = $api_client ?? new Barefoot_Api_Client();
     }
 
     public function register_routes(): void
@@ -120,18 +123,21 @@ class Api_Integration_Controller
         if (!$this->settings->has_required_credentials($settings)) {
             return new WP_Error(
                 'barefoot_engine_api_incomplete_credentials',
-                __('Please save a username, company ID, and password before testing the connection.', 'barefoot-engine'),
+                __('Please save a username, Barefoot account / portal ID, and password before testing the connection.', 'barefoot-engine'),
                 ['status' => 400]
             );
+        }
+
+        $result = $this->api_client->test_connection($settings);
+        if (is_wp_error($result)) {
+            return $result;
         }
 
         return rest_ensure_response(
             [
                 'success' => true,
-                'message' => __('Mock connection test succeeded.', 'barefoot-engine'),
-                'data' => [
-                    'checked_at' => time(),
-                ],
+                'message' => __('Barefoot connection test succeeded.', 'barefoot-engine'),
+                'data' => $result,
             ]
         );
     }
