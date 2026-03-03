@@ -16,8 +16,8 @@ if (!defined('ABSPATH')) {
 
             <div class="be-sync-actions">
                 <button class="be-button be-button-primary" type="button" @click="syncProperties()" :disabled="isSyncing || isLoading">
-                    <span class="be-icon material-symbols-outlined" aria-hidden="true" x-text="isSyncing ? 'hourglass_top' : 'cloud_download'"></span>
-                    <span x-text="isSyncing ? '<?php echo esc_attr__('Syncing...', 'barefoot-engine'); ?>' : fullSyncButtonLabel()"></span>
+                    <span class="be-icon material-symbols-outlined" aria-hidden="true" x-text="isSyncRunning() && activeSyncMode === 'full' ? 'hourglass_top' : 'cloud_download'"></span>
+                    <span x-text="isSyncRunning() && activeSyncMode === 'full' ? '<?php echo esc_attr__('Syncing...', 'barefoot-engine'); ?>' : fullSyncButtonLabel()"></span>
                 </button>
 
                 <button
@@ -28,18 +28,24 @@ if (!defined('ABSPATH')) {
                     x-show="canRunPartialSync()"
                     x-cloak
                 >
-                    <span class="be-icon material-symbols-outlined" aria-hidden="true" x-text="isSyncing ? 'hourglass_top' : 'update'"></span>
-                    <span><?php echo esc_html__('Partial Sync', 'barefoot-engine'); ?></span>
+                    <span class="be-icon material-symbols-outlined" aria-hidden="true" x-text="isSyncRunning() && activeSyncMode === 'partial' ? 'hourglass_top' : 'update'"></span>
+                    <span x-text="isSyncRunning() && activeSyncMode === 'partial' ? '<?php echo esc_attr__('Syncing...', 'barefoot-engine'); ?>' : '<?php echo esc_attr__('Partial Sync', 'barefoot-engine'); ?>'"></span>
                 </button>
             </div>
         </div>
 
         <div
             class="be-sync-progress be-columns"
-            x-show="isSyncing || progress.active"
+            :class="progressStateClass()"
+            x-show="shouldShowProgress()"
             x-cloak
             aria-live="polite"
         >
+            <p
+                class="be-sync-progress-status be-label-text"
+                x-show="progressStatusText()"
+                x-text="progressStatusText()"
+            ></p>
             <div
                 class="be-sync-progress-track"
                 role="progressbar"

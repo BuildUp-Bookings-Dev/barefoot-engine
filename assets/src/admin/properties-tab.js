@@ -238,7 +238,27 @@ export default function propertiesTab() {
       return this.syncState.last_full_finished_at > 0;
     },
     shouldPoll() {
-      return this.syncState.last_status === 'running' || this.progress.active || this.isSyncing;
+      return this.syncState.last_status === 'running' || this.progress.active;
+    },
+    isSyncRunning() {
+      return this.syncState.last_status === 'running' || this.progress.active;
+    },
+    isSyncCompleteState() {
+      return (
+        !this.isSyncRunning() &&
+        this.syncState.last_status === 'success' &&
+        this.progress.stage === 'complete' &&
+        this.progress.total > 0
+      );
+    },
+    shouldShowProgress() {
+      return this.isSyncRunning() || this.isSyncCompleteState();
+    },
+    progressStateClass() {
+      return {
+        'is-running': this.isSyncRunning(),
+        'is-complete': this.isSyncCompleteState(),
+      };
     },
     hydrate(payload) {
       const data = payload && payload.data && typeof payload.data === 'object' ? payload.data : {};
@@ -396,7 +416,22 @@ export default function propertiesTab() {
 
       return `width:${percent}%;`;
     },
+    progressStatusText() {
+      if (this.isSyncCompleteState()) {
+        return 'Sync complete';
+      }
+
+      if (this.isSyncRunning()) {
+        return this.activeSyncMode === 'partial' ? 'Partial Sync in progress' : 'Full Sync in progress';
+      }
+
+      return '';
+    },
     progressSummaryText() {
+      if (this.isSyncCompleteState()) {
+        return `Sync complete. ${this.progress.current} of ${this.progress.total} properties synced`;
+      }
+
       if (this.progress.total > 0) {
         return `${this.progress.current} of ${this.progress.total} properties synced`;
       }
@@ -408,6 +443,10 @@ export default function propertiesTab() {
       return 'Sync in progress…';
     },
     progressCurrentItemText() {
+      if (this.isSyncCompleteState()) {
+        return 'All properties finished syncing successfully.';
+      }
+
       const title = this.progress.current_property_title || '';
       const id = this.progress.current_property_id || '';
 

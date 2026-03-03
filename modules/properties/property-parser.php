@@ -291,6 +291,79 @@ class Property_Parser
         ];
     }
 
+    /**
+     * @return array<string, mixed>|WP_Error
+     */
+    public function parse_property_rates(string $xml): array|WP_Error
+    {
+        $document = $this->load_document($xml);
+        if ($document === null) {
+            return new WP_Error(
+                'barefoot_engine_property_invalid_rates_xml',
+                __('Barefoot returned invalid property rates XML.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $items = [];
+        $by_type = [];
+        $xpath = new \DOMXPath($document);
+        $row_nodes = $xpath->query('//*[local-name()="PropertyRates"]');
+        if ($row_nodes === false) {
+            $row_nodes = [];
+        }
+
+        foreach ($row_nodes as $row_node) {
+            if (!$row_node instanceof \DOMElement) {
+                continue;
+            }
+
+            $record = [];
+
+            foreach ($row_node->childNodes as $field_node) {
+                if (!$field_node instanceof \DOMElement) {
+                    continue;
+                }
+
+                $record[$field_node->localName] = trim($field_node->textContent);
+            }
+
+            if ($record === []) {
+                continue;
+            }
+
+            $item = [
+                'date1' => isset($record['date1']) ? trim((string) $record['date1']) : '',
+                'date2' => isset($record['date2']) ? trim((string) $record['date2']) : '',
+                'date_start' => $this->normalize_rate_date($record['date1'] ?? ''),
+                'date_end' => $this->normalize_rate_date($record['date2'] ?? ''),
+                'rent' => isset($record['rent']) ? trim((string) $record['rent']) : '',
+                'amount' => $this->normalize_rate_amount($record['rent'] ?? ''),
+                'pricetype' => isset($record['pricetype']) ? strtolower(trim((string) $record['pricetype'])) : '',
+                'wk_b' => isset($record['wk_b']) ? trim((string) $record['wk_b']) : '',
+                'wk_e' => isset($record['wk_e']) ? trim((string) $record['wk_e']) : '',
+                'priceid' => isset($record['priceid']) ? trim((string) $record['priceid']) : '',
+            ];
+
+            $items[] = $item;
+
+            $rate_type = $item['pricetype'];
+            if ($rate_type !== '') {
+                if (!isset($by_type[$rate_type]) || !is_array($by_type[$rate_type])) {
+                    $by_type[$rate_type] = [];
+                }
+
+                $by_type[$rate_type][] = $item;
+            }
+        }
+
+        return [
+            'items' => $items,
+            'by_type' => $by_type,
+            'raw_xml' => trim($xml),
+        ];
+    }
+
     private function load_document(string $xml): ?\DOMDocument
     {
         $document = new \DOMDocument('1.0', 'UTF-8');
@@ -534,6 +607,36 @@ class Property_Parser
         }
 
         return $deduped;
+    }
+
+    private function normalize_rate_date(mixed $value): string
+    {
+        $normalized = is_scalar($value) ? trim((string) $value) : '';
+        if ($normalized === '') {
+            return '';
+        }
+
+        $date = \DateTimeImmutable::createFromFormat('m/d/Y', $normalized);
+        if ($date instanceof \DateTimeImmutable) {
+            return $date->format('Y-m-d');
+        }
+
+        return $normalized;
+    }
+
+    private function normalize_rate_amount(mixed $value): ?float
+    {
+        $normalized = is_scalar($value) ? trim((string) $value) : '';
+        if ($normalized === '') {
+            return null;
+        }
+
+        $normalized = preg_replace('/[^0-9.\-]/', '', $normalized);
+        if (!is_string($normalized) || $normalized === '' || !is_numeric($normalized)) {
+            return null;
+        }
+
+        return (float) $normalized;
     }
 
 }

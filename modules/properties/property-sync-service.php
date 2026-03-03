@@ -16,6 +16,7 @@ class Property_Sync_Service
     public const SYNC_STATE_OPTION_KEY = 'barefoot_engine_property_sync_state';
     private const QUERYABLE_META_INDEX_KEY = '_be_property_queryable_meta_keys';
     private const QUERYABLE_META_PREFIX = '_be_property_api_';
+    private const DEFAULT_RATES_WINDOW_DAYS = 365;
     private const CURATED_FIELD_ORDER = [
         'PropertyID',
         'name',
@@ -668,6 +669,9 @@ class Property_Sync_Service
 
         $images = [];
         $images_raw_xml = '';
+        $rates = [];
+        $rates_raw_xml = '';
+        $rates_window = $this->build_property_rates_window();
 
         if ($property_id !== '') {
             $images_xml = $this->api_client->fetch_property_images_xml($settings, $property_id);
@@ -702,12 +706,58 @@ class Property_Sync_Service
             $images_raw_xml = isset($parsed_images['raw_xml']) && is_string($parsed_images['raw_xml'])
                 ? $parsed_images['raw_xml']
                 : '';
+
+            $rates_xml = $this->api_client->fetch_property_rates_xml(
+                $settings,
+                $property_id,
+                $rates_window['start'],
+                $rates_window['end']
+            );
+            if (is_wp_error($rates_xml)) {
+                return new WP_Error(
+                    $rates_xml->get_error_code(),
+                    sprintf(
+                        /* translators: %s: Barefoot property ID */
+                        __('Unable to fetch rates for property %s.', 'barefoot-engine'),
+                        $property_id
+                    ) . ' ' . $rates_xml->get_error_message(),
+                    $rates_xml->get_error_data()
+                );
+            }
+
+            $parsed_rates = $this->parser->parse_property_rates($rates_xml);
+            if (is_wp_error($parsed_rates)) {
+                return new WP_Error(
+                    $parsed_rates->get_error_code(),
+                    sprintf(
+                        /* translators: %s: Barefoot property ID */
+                        __('Unable to parse rates for property %s.', 'barefoot-engine'),
+                        $property_id
+                    ) . ' ' . $parsed_rates->get_error_message(),
+                    $parsed_rates->get_error_data()
+                );
+            }
+
+            $rates = [
+                'window' => $rates_window,
+                'items' => isset($parsed_rates['items']) && is_array($parsed_rates['items'])
+                    ? array_values($parsed_rates['items'])
+                    : [],
+                'by_type' => isset($parsed_rates['by_type']) && is_array($parsed_rates['by_type'])
+                    ? $parsed_rates['by_type']
+                    : [],
+            ];
+            $rates_raw_xml = isset($parsed_rates['raw_xml']) && is_string($parsed_rates['raw_xml'])
+                ? $parsed_rates['raw_xml']
+                : '';
         }
 
         $raw_xml = isset($property['raw_xml']) && is_string($property['raw_xml']) ? $property['raw_xml'] : '';
         $property['images'] = $images;
         $property['images_raw_xml'] = $images_raw_xml;
-        $property['source_hash'] = $this->build_property_source_hash($raw_xml, $images_raw_xml);
+        $property['rates'] = $rates;
+        $property['rates_raw_xml'] = $rates_raw_xml;
+        $property['source_hash'] = $this->build_property_source_hash($raw_xml, $images_raw_xml, $rates_raw_xml);
 
         return $property;
     }
@@ -1094,9 +1144,11 @@ class Property_Sync_Service
         $raw_xml = isset($property['raw_xml']) && is_string($property['raw_xml']) ? $property['raw_xml'] : '';
         $images = isset($property['images']) && is_array($property['images']) ? array_values($property['images']) : [];
         $images_raw_xml = isset($property['images_raw_xml']) && is_string($property['images_raw_xml']) ? $property['images_raw_xml'] : '';
+        $rates = isset($property['rates']) && is_array($property['rates']) ? $property['rates'] : [];
+        $rates_raw_xml = isset($property['rates_raw_xml']) && is_string($property['rates_raw_xml']) ? $property['rates_raw_xml'] : '';
         $source_hash = isset($property['source_hash']) && is_string($property['source_hash'])
             ? $property['source_hash']
-            : $this->build_property_source_hash($raw_xml, $images_raw_xml);
+            : $this->build_property_source_hash($raw_xml, $images_raw_xml, $rates_raw_xml);
 
         if ($merge_existing_fields) {
             if ($property_id === '') {
@@ -1122,6 +1174,8 @@ class Property_Sync_Service
         $this->persist_queryable_field_meta($post_id, $storage['raw_fields'], !empty($property['preserve_existing_queryable_meta']));
         update_post_meta($post_id, '_be_property_images', $images);
         update_post_meta($post_id, '_be_property_images_raw_xml', $images_raw_xml);
+        update_post_meta($post_id, '_be_property_rates', $rates);
+        update_post_meta($post_id, '_be_property_rates_raw_xml', $rates_raw_xml);
         update_post_meta($post_id, '_be_property_raw_xml', $raw_xml);
         update_post_meta($post_id, '_be_property_last_synced_at', $timestamp);
         update_post_meta($post_id, '_be_property_source_hash', $source_hash);
@@ -1538,9 +1592,35 @@ class Property_Sync_Service
         return $message;
     }
 
-    private function build_property_source_hash(string $raw_xml, string $images_raw_xml): string
+    private function build_property_source_hash(string $raw_xml, string $images_raw_xml, string $rates_raw_xml = ''): string
     {
-        return sha1($raw_xml . "\n--images--\n" . $images_raw_xml);
+        return sha1($raw_xml . "\n--images--\n" . $images_raw_xml . "\n--rates--\n" . $rates_raw_xml);
+    }
+
+    /**
+     * @return array{start: string, end: string}
+     */
+    private function build_property_rates_window(): array
+    {
+        $window_days = (int) apply_filters(
+            'barefoot_engine_property_rates_window_days',
+            self::DEFAULT_RATES_WINDOW_DAYS
+        );
+
+        if ($window_days < 1) {
+            $window_days = self::DEFAULT_RATES_WINDOW_DAYS;
+        }
+
+        $start_timestamp = current_time('timestamp');
+        $end_timestamp = strtotime('+' . $window_days . ' days', $start_timestamp);
+        if ($end_timestamp === false) {
+            $end_timestamp = $start_timestamp;
+        }
+
+        return [
+            'start' => wp_date('Y-m-d', $start_timestamp),
+            'end' => wp_date('Y-m-d', $end_timestamp),
+        ];
     }
 
     /**

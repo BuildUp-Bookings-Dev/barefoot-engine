@@ -934,6 +934,19 @@ $be-border: #e2e8f0;
   gap: 10px;
 }
 
+.be-sync-progress-status {
+  margin: 0;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.be-sync-progress.is-complete .be-sync-progress-status {
+  color: #15803d;
+}
+
 .be-sync-progress-track {
   position: relative;
   width: 100%;
@@ -941,6 +954,7 @@ $be-border: #e2e8f0;
   overflow: hidden;
   border-radius: 999px;
   background: #dbeafe;
+  transition: background-color 180ms ease;
 }
 
 .be-sync-progress-bar {
@@ -955,6 +969,15 @@ $be-border: #e2e8f0;
 .be-sync-progress-bar.is-determinate {
   inset: 0 auto 0 0;
   animation: none;
+  transition: width 180ms ease, background 180ms ease;
+}
+
+.be-sync-progress.is-complete .be-sync-progress-track {
+  background: #dcfce7;
+}
+
+.be-sync-progress.is-complete .be-sync-progress-bar {
+  background: linear-gradient(90deg, #16a34a 0%, #4ade80 100%);
 }
 
 .be-sync-progress-text {
@@ -967,6 +990,14 @@ $be-border: #e2e8f0;
 .be-sync-progress-detail {
   color: #475569;
   font-weight: 500;
+}
+
+.be-sync-progress.is-complete .be-sync-progress-text {
+  color: #166534;
+}
+
+.be-sync-progress.is-complete .be-sync-progress-detail {
+  color: #15803d;
 }
 
 .be-sync-summary-grid {

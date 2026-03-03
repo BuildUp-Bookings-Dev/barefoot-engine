@@ -131,6 +131,43 @@ class Barefoot_Api_Client
 
     /**
      * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
+    public function fetch_property_rates_xml(array $settings, string $property_id, string $start_date, string $end_date): string|WP_Error
+    {
+        $normalized_property_id = trim($property_id);
+        $normalized_start_date = trim($start_date);
+        $normalized_end_date = trim($end_date);
+
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required to fetch property rates.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        if ($normalized_start_date === '' || $normalized_end_date === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_rate_window',
+                __('A valid rate date window is required to fetch property rates.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_document_method(
+            'GetPropertyRates',
+            $settings,
+            [
+                'propertyId' => $normalized_property_id,
+                'Date1' => $normalized_start_date,
+                'Date2' => $normalized_end_date,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
      * @return array<string, string>|WP_Error
      */
     public function fetch_amenity_labels(array $settings): array|WP_Error
@@ -196,6 +233,43 @@ class Barefoot_Api_Client
 
         $raw = $this->extract_xml_string($body);
         if ($raw === '') {
+            return new WP_Error(
+                'barefoot_engine_api_invalid_response',
+                __('Barefoot returned an invalid XML payload.', 'barefoot-engine'),
+                [
+                    'status' => 502,
+                    'details' => $this->summarize_remote_error($body),
+                ]
+            );
+        }
+
+        return $raw;
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @param array<string, string> $extra_params
+     * @return string|WP_Error
+     */
+    private function request_xml_document_method(string $method, array $settings, array $extra_params = []): string|WP_Error
+    {
+        $response = $this->request_method($method, $settings, $extra_params);
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $body = isset($response['body']) && is_string($response['body']) ? trim($response['body']) : '';
+        if ($body === '') {
+            return new WP_Error(
+                'barefoot_engine_api_empty_response',
+                __('Barefoot returned an empty response.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $raw = $this->extract_xml_string($body);
+        $document = $this->load_document($raw);
+        if ($document === null || !$document->documentElement instanceof \DOMElement) {
             return new WP_Error(
                 'barefoot_engine_api_invalid_response',
                 __('Barefoot returned an invalid XML payload.', 'barefoot-engine'),
