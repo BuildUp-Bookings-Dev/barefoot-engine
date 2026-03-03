@@ -197,7 +197,6 @@ $typography_rows = [
                     @input="clearFieldError('custom_css')"
                     placeholder=".barefoot-engine-public .be-paragraph {&#10;  color: #0f172a;&#10;}"
                 ></textarea>
-                <span class="be-field-help be-paragraph"><?php echo esc_html__('Saved CSS is printed on frontend in a style tag with class be-custom-css.', 'barefoot-engine'); ?></span>
                 <template x-if="fieldError('custom_css')">
                     <span class="be-field-help be-field-help-error" x-text="fieldError('custom_css')"></span>
                 </template>

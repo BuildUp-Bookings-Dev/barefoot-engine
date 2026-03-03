@@ -31,14 +31,14 @@ const getPropertiesConfig = () => {
       typeof config.settingsEndpoint === 'string' && config.settingsEndpoint !== ''
         ? config.settingsEndpoint
         : 'properties/settings',
-    aliasesEndpoint:
-      typeof config.aliasesEndpoint === 'string' && config.aliasesEndpoint !== ''
-        ? config.aliasesEndpoint
-        : 'properties/aliases',
     syncEndpoint:
       typeof config.syncEndpoint === 'string' && config.syncEndpoint !== ''
         ? config.syncEndpoint
         : 'properties/sync',
+    partialSyncEndpoint:
+      typeof config.partialSyncEndpoint === 'string' && config.partialSyncEndpoint !== ''
+        ? config.partialSyncEndpoint
+        : 'properties/partial-sync',
   };
 };
 
@@ -104,6 +104,17 @@ const emptySummary = () => ({
   total_seen: 0,
 });
 
+const emptyProgress = () => ({
+  active: false,
+  mode: 'none',
+  stage: 'idle',
+  current: 0,
+  total: 0,
+  message: '',
+  current_property_id: '',
+  current_property_title: '',
+});
+
 const emptySyncState = () => ({
   last_started_at: 0,
   last_finished_at: 0,
@@ -111,8 +122,32 @@ const emptySyncState = () => ({
   last_finished_human: 'Not available',
   last_status: 'idle',
   last_error: '',
+  last_sync_mode: 'none',
+  last_full_started_at: 0,
+  last_full_finished_at: 0,
+  last_full_started_human: 'Not available',
+  last_full_finished_human: 'Not available',
+  last_full_status: 'idle',
   summary: emptySummary(),
+  progress: emptyProgress(),
 });
+
+const normalizeProgress = (progress) => {
+  const input = progress && typeof progress === 'object' ? progress : {};
+
+  return {
+    active: Boolean(input.active),
+    mode: typeof input.mode === 'string' && input.mode !== '' ? input.mode : 'none',
+    stage: typeof input.stage === 'string' && input.stage !== '' ? input.stage : 'idle',
+    current: Number.isFinite(Number(input.current)) ? Number(input.current) : 0,
+    total: Number.isFinite(Number(input.total)) ? Number(input.total) : 0,
+    message: typeof input.message === 'string' ? input.message : '',
+    current_property_id:
+      typeof input.current_property_id === 'string' ? input.current_property_id : '',
+    current_property_title:
+      typeof input.current_property_title === 'string' ? input.current_property_title : '',
+  };
+};
 
 const normalizeSyncState = (state) => {
   const input = state && typeof state === 'object' ? state : {};
@@ -133,6 +168,28 @@ const normalizeSyncState = (state) => {
       typeof input.last_status === 'string' && input.last_status !== '' ? input.last_status : 'idle',
     last_error:
       typeof input.last_error === 'string' && input.last_error !== '' ? input.last_error : '',
+    last_sync_mode:
+      typeof input.last_sync_mode === 'string' && input.last_sync_mode !== ''
+        ? input.last_sync_mode
+        : 'none',
+    last_full_started_at: Number.isFinite(Number(input.last_full_started_at))
+      ? Number(input.last_full_started_at)
+      : 0,
+    last_full_finished_at: Number.isFinite(Number(input.last_full_finished_at))
+      ? Number(input.last_full_finished_at)
+      : 0,
+    last_full_started_human:
+      typeof input.last_full_started_human === 'string' && input.last_full_started_human !== ''
+        ? input.last_full_started_human
+        : 'Not available',
+    last_full_finished_human:
+      typeof input.last_full_finished_human === 'string' && input.last_full_finished_human !== ''
+        ? input.last_full_finished_human
+        : 'Not available',
+    last_full_status:
+      typeof input.last_full_status === 'string' && input.last_full_status !== ''
+        ? input.last_full_status
+        : 'idle',
     summary: {
       created: Number.isFinite(Number(summaryInput.created)) ? Number(summaryInput.created) : 0,
       updated: Number.isFinite(Number(summaryInput.updated)) ? Number(summaryInput.updated) : 0,
@@ -143,43 +200,26 @@ const normalizeSyncState = (state) => {
       skipped: Number.isFinite(Number(summaryInput.skipped)) ? Number(summaryInput.skipped) : 0,
       total_seen: Number.isFinite(Number(summaryInput.total_seen)) ? Number(summaryInput.total_seen) : 0,
     },
+    progress: normalizeProgress(input.progress),
   };
-};
-
-const normalizeAliasRows = (rows) => {
-  if (!Array.isArray(rows)) {
-    return [];
-  }
-
-  return rows
-    .filter((row) => row && typeof row === 'object' && typeof row.key === 'string' && row.key !== '')
-    .map((row) => ({
-      key: row.key,
-      default_label:
-        typeof row.default_label === 'string' && row.default_label !== '' ? row.default_label : row.key,
-      alias: typeof row.alias === 'string' ? row.alias : '',
-      effective_label:
-        typeof row.effective_label === 'string' && row.effective_label !== ''
-          ? row.effective_label
-          : typeof row.default_label === 'string' && row.default_label !== ''
-            ? row.default_label
-            : row.key,
-    }));
 };
 
 export default function propertiesTab() {
   return {
     isLoading: false,
-    isSavingAliases: false,
     isSyncing: false,
-    syncProgressMessage: 'Preparing Barefoot sync request...',
-    aliasRows: [],
+    isPolling: false,
+    activeSyncMode: 'none',
+    pollTimer: null,
     syncState: emptySyncState(),
     init() {
       this.loadSettings();
     },
     get summary() {
       return this.syncState.summary || emptySummary();
+    },
+    get progress() {
+      return this.syncState.progress || emptyProgress();
     },
     statusLabel() {
       const labels = {
@@ -191,10 +231,25 @@ export default function propertiesTab() {
 
       return labels[this.syncState.last_status] || 'Idle';
     },
+    fullSyncButtonLabel() {
+      return this.canRunPartialSync() ? 'Full Sync' : 'Sync Properties';
+    },
+    canRunPartialSync() {
+      return this.syncState.last_full_finished_at > 0;
+    },
+    shouldPoll() {
+      return this.syncState.last_status === 'running' || this.progress.active || this.isSyncing;
+    },
     hydrate(payload) {
       const data = payload && payload.data && typeof payload.data === 'object' ? payload.data : {};
-      this.aliasRows = normalizeAliasRows(data.alias_rows);
       this.syncState = normalizeSyncState(data.sync_state);
+      this.isSyncing = this.shouldPoll();
+
+      if (this.shouldPoll()) {
+        this.startPolling();
+      } else {
+        this.stopPolling();
+      }
     },
     async loadSettings() {
       if (this.isLoading) {
@@ -224,80 +279,60 @@ export default function propertiesTab() {
         this.isLoading = false;
       }
     },
-    updateAlias(index, value) {
-      const row = this.aliasRows[index];
-      if (!row) {
+    startPolling() {
+      if (this.pollTimer) {
         return;
       }
 
-      row.alias = value;
-      row.effective_label = value.trim() !== '' ? value.trim() : row.default_label;
+      this.pollTimer = window.setInterval(() => {
+        void this.pollSyncState();
+      }, 1000);
     },
-    buildAliasPayload() {
-      return this.aliasRows.reduce((aliases, row) => {
-        if (!row || typeof row.key !== 'string') {
-          return aliases;
-        }
-
-        const alias = typeof row.alias === 'string' ? row.alias.trim() : '';
-        if (alias !== '') {
-          aliases[row.key] = alias;
-        }
-
-        return aliases;
-      }, {});
-    },
-    async saveAliases() {
-      if (this.isSavingAliases || this.isLoading) {
+    stopPolling() {
+      if (!this.pollTimer) {
         return;
       }
 
-      this.isSavingAliases = true;
+      window.clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    },
+    async pollSyncState() {
+      if (this.isPolling) {
+        return;
+      }
+
+      this.isPolling = true;
 
       try {
         const config = getPropertiesConfig();
-        const response = await requestJson(config.aliasesEndpoint, {
-          method: 'POST',
-          body: JSON.stringify({
-            aliases: this.buildAliasPayload(),
-          }),
+        const response = await requestJson(config.settingsEndpoint, {
+          method: 'GET',
         });
 
         this.hydrate(response);
-
-        dispatchAlert({
-          variant: 'success',
-          title: 'Aliases saved',
-          replace: true,
-          message:
-            (response && typeof response.message === 'string' && response.message) ||
-            'Property aliases saved successfully.',
-        });
       } catch (error) {
-        dispatchAlert({
-          variant: 'error',
-          title: 'Save failed',
-          replace: true,
-          message:
-            error instanceof Error && error.message
-              ? error.message
-              : 'Unable to save property aliases.',
-        });
+        if (!this.shouldPoll()) {
+          this.stopPolling();
+        }
       } finally {
-        this.isSavingAliases = false;
+        this.isPolling = false;
       }
     },
-    async syncProperties() {
+    async runSync(mode = 'full') {
       if (this.isSyncing || this.isLoading) {
         return;
       }
 
+      const config = getPropertiesConfig();
+      const endpoint =
+        mode === 'partial' ? config.partialSyncEndpoint : config.syncEndpoint;
+
+      this.activeSyncMode = mode;
       this.isSyncing = true;
-      this.syncProgressMessage = 'Fetching active properties from Barefoot and importing records...';
+      this.startPolling();
 
       try {
-        const config = getPropertiesConfig();
-        const response = await requestJson(config.syncEndpoint, {
+        const response = await requestJson(endpoint, {
           method: 'POST',
           body: JSON.stringify({}),
         });
@@ -314,26 +349,83 @@ export default function propertiesTab() {
 
         dispatchAlert({
           variant: 'success',
-          title: 'Sync complete',
+          title: mode === 'partial' ? 'Partial sync complete' : 'Sync complete',
           replace: true,
           message:
             (response && typeof response.message === 'string' && response.message) ||
-            'Property sync completed successfully.',
+            (mode === 'partial'
+              ? 'Partial property sync completed successfully.'
+              : 'Property sync completed successfully.'),
         });
       } catch (error) {
         dispatchAlert({
           variant: 'error',
-          title: 'Sync failed',
+          title: mode === 'partial' ? 'Partial sync failed' : 'Sync failed',
           replace: true,
           message:
             error instanceof Error && error.message
               ? error.message
-              : 'Unable to sync properties.',
+              : mode === 'partial'
+                ? 'Unable to run partial property sync.'
+                : 'Unable to sync properties.',
         });
       } finally {
-        this.isSyncing = false;
-        this.syncProgressMessage = 'Preparing Barefoot sync request...';
+        this.activeSyncMode = 'none';
+        this.isSyncing = this.shouldPoll();
+        if (!this.isSyncing) {
+          this.stopPolling();
+        }
       }
+    },
+    syncProperties() {
+      void this.runSync('full');
+    },
+    partialSyncProperties() {
+      void this.runSync('partial');
+    },
+    hasDeterminateProgress() {
+      return this.progress.total > 0;
+    },
+    progressBarStyle() {
+      if (!this.hasDeterminateProgress()) {
+        return '';
+      }
+
+      const current = Math.max(0, Math.min(this.progress.current, this.progress.total));
+      const percent = this.progress.total > 0 ? (current / this.progress.total) * 100 : 0;
+
+      return `width:${percent}%;`;
+    },
+    progressSummaryText() {
+      if (this.progress.total > 0) {
+        return `${this.progress.current} of ${this.progress.total} properties synced`;
+      }
+
+      if (this.progress.message) {
+        return this.progress.message;
+      }
+
+      return 'Sync in progress…';
+    },
+    progressCurrentItemText() {
+      const title = this.progress.current_property_title || '';
+      const id = this.progress.current_property_id || '';
+
+      if (title && id) {
+        return `Current: ${title} (${id})`;
+      }
+
+      if (id) {
+        return `Current: ${id}`;
+      }
+
+      return '';
+    },
+    progressAriaText() {
+      return this.progress.message || this.progressSummaryText();
+    },
+    progressValueMax() {
+      return this.progress.total > 0 ? this.progress.total : 100;
     },
   };
 }

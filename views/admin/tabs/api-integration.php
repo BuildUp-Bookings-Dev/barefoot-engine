@@ -52,7 +52,6 @@ if (!defined('ABSPATH')) {
             <template x-if="fieldErrors.company_id">
                 <span class="be-field-help be-field-help-error" x-text="fieldErrors.company_id"></span>
             </template>
-            <span class="be-field-help"><?php echo esc_html__('Barefoot calls this value barefootAccount in the web service and portalid in older docs.', 'barefoot-engine'); ?></span>
         </label>
     </form>
 

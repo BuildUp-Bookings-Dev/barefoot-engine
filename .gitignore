@@ -6,6 +6,7 @@ dist/*
 !dist/.gitkeep
 .build/
 .npm/
+.env
 .DS_Store
 sample
 .playwright-cli/

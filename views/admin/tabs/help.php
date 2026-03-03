@@ -23,23 +23,23 @@ if (!defined('ABSPATH')) {
             <tbody>
                 <tr>
                     <td><code><?php echo esc_html__('General', 'barefoot-engine'); ?></code></td>
-                    <td><?php echo esc_html__('Controls shared appearance, typography, colors, and custom CSS used on the public site.', 'barefoot-engine'); ?></td>
-                    <td><?php echo esc_html__('Verify brand colors, fonts, and any custom CSS output after saving changes.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Manage colors, typography, and custom styling for the site.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Check that saved styling changes appear as expected on the site.', 'barefoot-engine'); ?></td>
                 </tr>
                 <tr>
                     <td><code><?php echo esc_html__('API Integration', 'barefoot-engine'); ?></code></td>
-                    <td><?php echo esc_html__('Stores API credentials and connection settings used for remote Barefoot data access.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Store the Barefoot login details used by the plugin.', 'barefoot-engine'); ?></td>
                     <td><?php echo esc_html__('Confirm the connection test passes and credentials are valid before syncing data.', 'barefoot-engine'); ?></td>
                 </tr>
                 <tr>
                     <td><code><?php echo esc_html__('Properties', 'barefoot-engine'); ?></code></td>
-                    <td><?php echo esc_html__('Manages property sync behavior, aliases, post type data, and property-specific admin tools.', 'barefoot-engine'); ?></td>
-                    <td><?php echo esc_html__('Check property records, alias mapping, and sync actions after changing related settings.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Import, review, and manage synced properties.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Review property records after syncing and confirm recent changes are present.', 'barefoot-engine'); ?></td>
                 </tr>
                 <tr>
                     <td><code><?php echo esc_html__('Updates', 'barefoot-engine'); ?></code></td>
-                    <td><?php echo esc_html__('Displays plugin update status and release information from the configured repository.', 'barefoot-engine'); ?></td>
-                    <td><?php echo esc_html__('Confirm the repository values are correct and that update checks resolve expected versions.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Check the current plugin version and available updates.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Review the latest release details when checking for updates.', 'barefoot-engine'); ?></td>
                 </tr>
             </tbody>
         </table>
@@ -52,9 +52,9 @@ if (!defined('ABSPATH')) {
             <span class="be-icon material-symbols-outlined" aria-hidden="true">inventory_2</span>
         </div>
         <div class="be-columns">
-            <h3 class="be-mini-card-heading be-heading"><?php echo esc_html__('Current Scope', 'barefoot-engine'); ?></h3>
-            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('This plugin currently focuses on shared settings, API integration, property management, and plugin updates.', 'barefoot-engine'); ?></p>
-            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Widget functionality is being rebuilt in controlled steps so each new piece can be validated before more configuration is added.', 'barefoot-engine'); ?></p>
+            <h3 class="be-mini-card-heading be-heading"><?php echo esc_html__('Before You Start', 'barefoot-engine'); ?></h3>
+            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Save and test your API credentials before running any property sync.', 'barefoot-engine'); ?></p>
+            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Use a full sync first, then use partial sync for smaller follow-up updates.', 'barefoot-engine'); ?></p>
         </div>
     </article>
 
@@ -65,7 +65,7 @@ if (!defined('ABSPATH')) {
         <div class="be-columns">
             <h3 class="be-mini-card-heading be-heading"><?php echo esc_html__('Recommended Workflow', 'barefoot-engine'); ?></h3>
             <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Save General settings first, then verify public output, then move to API and property operations.', 'barefoot-engine'); ?></p>
-            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Run property syncs only after API credentials and alias settings are confirmed.', 'barefoot-engine'); ?></p>
+            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Run property syncs only after API credentials are confirmed.', 'barefoot-engine'); ?></p>
         </div>
     </article>
 </section>
@@ -74,10 +74,10 @@ if (!defined('ABSPATH')) {
     <div class="be-columns">
         <h3 class="be-section-title be-heading be-rows">
             <span class="be-icon material-symbols-outlined" aria-hidden="true">tips_and_updates</span>
-            <?php echo esc_html__('Support Notes', 'barefoot-engine'); ?>
+            <?php echo esc_html__('Helpful Tips', 'barefoot-engine'); ?>
         </h3>
-        <p class="be-paragraph"><?php echo esc_html__('After changing settings that affect public styling or plugin behavior, reload the relevant admin screen and a frontend page to confirm the output.', 'barefoot-engine'); ?></p>
-        <p class="be-paragraph"><?php echo esc_html__('If Elementor or another builder caches rendered content, clear its generated files after major plugin changes so new asset references and markup are picked up.', 'barefoot-engine'); ?></p>
-        <p class="be-paragraph"><?php echo esc_html__('Keep new widget behavior incremental so shortcode output, assets, and frontend behavior can be checked before advanced configuration is introduced.', 'barefoot-engine'); ?></p>
+        <p class="be-paragraph"><?php echo esc_html__('After saving settings, refresh the relevant admin screen and a frontend page to confirm the changes.', 'barefoot-engine'); ?></p>
+        <p class="be-paragraph"><?php echo esc_html__('If changes do not appear right away, clear site or builder caches and reload the page.', 'barefoot-engine'); ?></p>
+        <p class="be-paragraph"><?php echo esc_html__('Run another sync after major property updates so the latest information is pulled into WordPress.', 'barefoot-engine'); ?></p>
     </div>
 </section>

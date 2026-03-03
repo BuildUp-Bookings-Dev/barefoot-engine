@@ -59,9 +59,97 @@ class Barefoot_Api_Client
 
     /**
      * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
+    public function fetch_last_updated_property_ids_string(array $settings, string $last_access_time): string|WP_Error
+    {
+        $normalized_last_access_time = trim($last_access_time);
+        if ($normalized_last_access_time === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_last_access_time',
+                __('A last access time is required to fetch updated Barefoot property IDs.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_string_method(
+            'GetLastUpdatedPropertyIDs',
+            $settings,
+            [
+                'lastaccesstime' => $normalized_last_access_time,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
+    public function fetch_property_details_xml(array $settings, string $property_id): string|WP_Error
+    {
+        $normalized_property_id = trim($property_id);
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required to fetch property details.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_string_method(
+            'GetPropertyDetails',
+            $settings,
+            [
+                'PropertyID' => $normalized_property_id,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
+    public function fetch_property_images_xml(array $settings, string $property_id): string|WP_Error
+    {
+        $normalized_property_id = trim($property_id);
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required to fetch property images.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_string_method(
+            'GetPropertyAllImgs',
+            $settings,
+            [
+                'propertyId' => $normalized_property_id,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
      * @return array<string, string>|WP_Error
      */
     public function fetch_amenity_labels(array $settings): array|WP_Error
+    {
+        $definitions = $this->fetch_amenity_definitions($settings);
+        if (is_wp_error($definitions)) {
+            return $definitions;
+        }
+
+        return isset($definitions['labels']) && is_array($definitions['labels'])
+            ? $definitions['labels']
+            : [];
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return array{labels: array<string, string>, types: array<string, string>}|WP_Error
+     */
+    public function fetch_amenity_definitions(array $settings): array|WP_Error
     {
         $xml = $this->request_xml_string_method(
             'GetPropertyAmmenityNameXML',
@@ -75,7 +163,7 @@ class Barefoot_Api_Client
             return $xml;
         }
 
-        return $this->parse_amenity_labels($xml);
+        return $this->parse_amenity_definitions($xml);
     }
 
     private function build_method_url(string $method): string
@@ -203,9 +291,9 @@ class Barefoot_Api_Client
     }
 
     /**
-     * @return array<string, string>|WP_Error
+     * @return array{labels: array<string, string>, types: array<string, string>}|WP_Error
      */
-    private function parse_amenity_labels(string $xml): array|WP_Error
+    private function parse_amenity_definitions(string $xml): array|WP_Error
     {
         $document = $this->load_document($xml, true);
         if ($document === null) {
@@ -223,6 +311,7 @@ class Barefoot_Api_Client
         }
 
         $labels = [];
+        $types = [];
 
         foreach ($nodes as $node) {
             if (!$node instanceof \DOMElement) {
@@ -230,7 +319,8 @@ class Barefoot_Api_Client
             }
 
             $key = '';
-            $value = '';
+            $label = '';
+            $type = '';
 
             foreach ($node->childNodes as $child) {
                 if (!$child instanceof \DOMElement) {
@@ -241,18 +331,27 @@ class Barefoot_Api_Client
                 if ($local_name === 'a_name') {
                     $key = trim($child->textContent);
                 } elseif ($local_name === 'a_value') {
-                    $value = trim($child->textContent);
+                    $label = trim($child->textContent);
+                } elseif ($local_name === 'a_type') {
+                    $type = trim($child->textContent);
                 }
             }
 
-            if ($key === '' || $value === '') {
+            if ($key === '' || $label === '') {
                 continue;
             }
 
-            $labels[$key] = $value;
+            $labels[$key] = $label;
+
+            if ($type !== '') {
+                $types[$key] = $type;
+            }
         }
 
-        return $labels;
+        return [
+            'labels' => $labels,
+            'types' => $types,
+        ];
     }
 
     private function load_document(string $xml, bool $wrap_if_needed = false): ?\DOMDocument

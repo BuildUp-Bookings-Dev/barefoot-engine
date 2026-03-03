@@ -126,8 +126,8 @@ class Admin
                     ],
                     'propertiesConfig' => [
                         'settingsEndpoint' => 'properties/settings',
-                        'aliasesEndpoint' => 'properties/aliases',
                         'syncEndpoint' => 'properties/sync',
+                        'partialSyncEndpoint' => 'properties/partial-sync',
                     ],
                     'apiIntegration' => $this->api_integration_settings->get_public_settings(),
                     'generalSettings' => $this->general_settings->get_public_settings(),
@@ -187,7 +187,7 @@ class Admin
                 'label' => __('Properties', 'barefoot-engine'),
                 'icon' => 'apartment',
                 'title' => __('Properties', 'barefoot-engine'),
-                'subtitle' => __('Import Barefoot properties, review sync status, and manage field aliases.', 'barefoot-engine'),
+                'subtitle' => __('Import Barefoot properties and review sync status.', 'barefoot-engine'),
                 'template' => 'properties.php',
             ],
             'updates' => [

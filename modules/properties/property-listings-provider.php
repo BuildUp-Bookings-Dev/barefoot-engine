@@ -302,6 +302,18 @@ class Property_Listings_Provider
     private function resolve_images(\WP_Post $post, array $fields): array
     {
         $images = [];
+
+        $stored_images = get_post_meta($post->ID, '_be_property_images', true);
+        if (is_array($stored_images)) {
+            foreach ($stored_images as $image) {
+                if (!is_string($image) || trim($image) === '') {
+                    continue;
+                }
+
+                $images[] = esc_url_raw($image);
+            }
+        }
+
         $thumbnail_url = get_the_post_thumbnail_url($post, 'large');
         if (is_string($thumbnail_url) && $thumbnail_url !== '') {
             $images[] = $thumbnail_url;
