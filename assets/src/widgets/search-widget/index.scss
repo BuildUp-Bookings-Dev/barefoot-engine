@@ -1,0 +1,13 @@
+@use '@braudypedrosa/bp-search-widget/styles' as bp_search_widget;
+@use '@braudypedrosa/bp-calendar/styles' as bp_calendar;
+
+.barefoot-engine-search-widget {
+  margin-block: 1.5rem;
+  width: 100%;
+}
+
+.barefoot-engine-search-widget__mount {
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+}

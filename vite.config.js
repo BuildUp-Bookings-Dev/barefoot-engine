@@ -10,11 +10,13 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        'admin-script': path.resolve(__dirname, 'assets/src/js/admin/index.js'),
-        'public-script': path.resolve(__dirname, 'assets/src/js/public/index.js'),
-        'admin-style': path.resolve(__dirname, 'assets/src/scss/admin/index.scss'),
-        'admin-tailwind-style': path.resolve(__dirname, 'assets/src/css/admin-tailwind.css'),
-        'public-style': path.resolve(__dirname, 'assets/src/scss/public/index.scss')
+        'admin-script': path.resolve(__dirname, 'assets/src/admin/index.js'),
+        'public-script': path.resolve(__dirname, 'assets/src/public/index.js'),
+        'search-widget-script': path.resolve(__dirname, 'assets/src/widgets/search-widget/index.js'),
+        'admin-style': path.resolve(__dirname, 'assets/src/admin/index.scss'),
+        'admin-tailwind-style': path.resolve(__dirname, 'assets/src/admin/tailwind.css'),
+        'public-style': path.resolve(__dirname, 'assets/src/public/index.scss'),
+        'search-widget-style': path.resolve(__dirname, 'assets/src/widgets/search-widget/index.scss')
       },
       output: {
         entryFileNames: 'js/[name]-[hash].js',

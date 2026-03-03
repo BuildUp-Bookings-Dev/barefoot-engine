@@ -24,21 +24,14 @@ define('BAREFOOT_ENGINE_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('BAREFOOT_ENGINE_GITHUB_REPOSITORY', 'https://github.com/BuildUp-Bookings-Dev/barefoot-engine');
 define('BAREFOOT_ENGINE_GITHUB_BRANCH', 'main');
 
-require_once BAREFOOT_ENGINE_PLUGIN_DIR . 'includes/class-autoloader.php';
+require_once BAREFOOT_ENGINE_PLUGIN_DIR . 'libraries/vendor/autoload.php';
 
-BarefootEngine\Includes\Autoloader::register();
-
-register_activation_hook(__FILE__, ['BarefootEngine\\Includes\\Activator', 'activate']);
-register_deactivation_hook(__FILE__, ['BarefootEngine\\Includes\\Deactivator', 'deactivate']);
+register_activation_hook(__FILE__, ['BarefootEngine\\Core\\Activator', 'activate']);
+register_deactivation_hook(__FILE__, ['BarefootEngine\\Core\\Deactivator', 'deactivate']);
 
 function barefoot_engine_bootstrap(): void
 {
-    $vendor_autoload = BAREFOOT_ENGINE_PLUGIN_DIR . 'libraries/vendor/autoload.php';
-    if (file_exists($vendor_autoload)) {
-        require_once $vendor_autoload;
-    }
-
-    $plugin = new BarefootEngine\Includes\Plugin();
+    $plugin = new BarefootEngine\Core\Plugin();
     $plugin->run();
 }
 

@@ -22,6 +22,7 @@ npm run build
 
 ```bash
 npm run build   # production build to assets/dist
+npm run check:naming   # validate plugin-owned paths stay kebab-case
 npm run watch   # watch mode for JS/SCSS builds
 ```
 
@@ -76,7 +77,7 @@ npm run changelog:check
 
 ## GitHub Updater
 
-`plugin-update-checker` is wired through `src/Integrations/class-github-updater.php` and configured for GitHub Releases assets.
+`plugin-update-checker` is wired through `modules/updates/github-updater.php` and configured for GitHub Releases assets.
 
 Updater constants in `barefoot-engine.php`:
 
@@ -104,3 +105,16 @@ To update widget versions in this plugin:
 1. Release/tag a new version in each library repo.
 2. Update versions in `package.json`.
 3. Run `npm install` and `npm run build`.
+
+## Structure
+
+- `bootstrap/`: plugin bootstrap and lifecycle classes
+- `support/`: shared infrastructure such as hook loading and the Vite manifest reader
+- `modules/`: non-widget plugin capabilities like admin, API integration, properties, and updates
+- `widgets/`: widget family PHP logic
+- `public/`: shared site-facing runtime orchestration
+- `settings/`: plugin-wide shared settings
+- `views/`: render-only PHP templates
+- `assets/src/`: source assets grouped by admin, public, and widget family
+
+Detailed naming and placement rules live in `docs/naming-conventions.md`.

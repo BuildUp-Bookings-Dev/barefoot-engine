@@ -5,6 +5,7 @@
   "description": "Barefoot Engine WordPress plugin scaffold",
   "scripts": {
     "build": "vite build",
+    "check:naming": "node ./scripts/check-kebab-case.mjs",
     "watch": "vite build --watch",
     "package": "node ./scripts/package.mjs",
     "changelog:check": "node ./scripts/changelog.mjs check",
@@ -23,6 +24,7 @@
   "dependencies": {
     "@braudypedrosa/bp-calendar": "^1.0.3",
     "@braudypedrosa/bp-listings": "^1.0.5",
+    "@braudypedrosa/bp-search-widget": "^1.0.1",
     "alpinejs": "^3.15.8"
   }
 }

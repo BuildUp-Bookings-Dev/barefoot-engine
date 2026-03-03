@@ -1,0 +1,39 @@
+name: Validate Plugin Structure
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction
+
+      - name: Regenerate Composer autoload files
+        run: composer dump-autoload -o
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Check naming conventions
+        run: npm run check:naming
+
+      - name: Build assets
+        run: npm run build
