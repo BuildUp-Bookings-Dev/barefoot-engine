@@ -145,6 +145,7 @@ $be-border: #e2e8f0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 .be-icon {
@@ -1113,10 +1114,20 @@ $be-border: #e2e8f0;
   gap: 16px;
 }
 
+.be-help-example-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
 .be-mini-card {
   padding: 20px;
   display: flex;
   gap: 14px;
+}
+
+.be-mini-card-code {
+  align-items: flex-start;
 }
 
 .be-mini-icon {
@@ -1169,6 +1180,36 @@ $be-border: #e2e8f0;
 .be-mini-card a:hover {
   color: $be-primary-hover;
   text-decoration: underline;
+}
+
+.be-code-block {
+  margin-top: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  overflow-x: auto;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.be-code-block pre {
+  margin: 0;
+  padding: 18px 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.65;
+  font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.be-code-block code {
+  display: block;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
 }
 
 @keyframes be-sync-progress {

@@ -34,13 +34,13 @@
 - Views render prepared data only.
 - Views must not instantiate services, register hooks, or persist data.
 - Admin templates belong in `views/admin/`.
-- Future widget or module templates should mirror their owner, for example `views/search-widget/`.
+- Future widget or module templates should mirror their owner, for example `views/example-widget/`.
 
 ## Assets
 
 - Admin assets belong in `assets/src/admin/`.
 - Shared public assets belong in `assets/src/public/`.
-- Widget assets belong in `assets/src/widgets/<widget-name>/`.
+- Widget assets belong in `assets/src/widgets/<widget-name>/` when a widget is active in the plugin.
 
 ## Exemptions
 
@@ -74,13 +74,13 @@ These directories are excluded from naming enforcement:
 Good:
 
 - `modules/api-integration/api-integration-controller.php`
-- `widgets/search-widget/search-widget-shortcode.php`
-- `assets/src/widgets/search-widget/index.js`
+- `widgets/example-widget/example-widget-shortcode.php`
+- `assets/src/widgets/example-widget/index.js`
 - `views/admin/tabs/properties.php`
 
 Bad:
 
 - `src/Services/General_Settings.php`
-- `src/Widgets/Search/Search_Widget_Shortcode.php`
+- `src/Widgets/Example/Example_Widget_Shortcode.php`
 - `templates/admin/components/header.php`
-- `assets/src/js/widgets/search-widgets.js`
+- `assets/src/js/widgets/legacy-widget.js`

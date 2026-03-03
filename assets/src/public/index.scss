@@ -1,6 +1,18 @@
 @use '@braudypedrosa/bp-calendar/styles' as bp_calendar;
 @use '@braudypedrosa/bp-listings/styles' as bp_listings;
+@use '@braudypedrosa/bp-search-widget/styles' as bp_search_widget;
 
 .barefoot-engine-public {
   border-top: 2px solid #0ea5e9;
+}
+
+.barefoot-engine-search-widget {
+  margin-block: 1.5rem;
+  width: 100%;
+}
+
+.barefoot-engine-search-widget__mount {
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
 }

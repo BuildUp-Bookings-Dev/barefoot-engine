@@ -3,7 +3,6 @@
 namespace BarefootEngine\Core;
 
 use BarefootEngine\Services\General_Settings;
-use BarefootEngine\Widgets\Search\Search_Widget_Shortcode;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -13,8 +12,25 @@ class Frontend
 {
     private const PUBLIC_SCRIPT_HANDLE = 'barefoot-engine-public';
     private const PUBLIC_STYLE_HANDLE = 'barefoot-engine-public';
-    private const SEARCH_WIDGET_SCRIPT_HANDLE = 'barefoot-engine-search-widget';
-    private const SEARCH_WIDGET_STYLE_HANDLE = 'barefoot-engine-search-widget';
+    private const FONT_AWESOME_HANDLE = 'barefoot-engine-font-awesome';
+    private const FONT_AWESOME_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css';
+    /**
+     * @var array<int, string>
+     */
+    private const FONT_AWESOME_KNOWN_HANDLES = [
+        'font-awesome',
+        'font-awesome-5',
+        'font-awesome-6',
+        'font-awesome-7',
+        'fontawesome',
+        'fontawesome-free',
+    ];
+    /**
+     * @var array<int, string>
+     */
+    private const MODULE_SCRIPT_HANDLES = [
+        self::PUBLIC_SCRIPT_HANDLE,
+    ];
 
     private Manifest $manifest;
     private General_Settings $general_settings;
@@ -29,15 +45,23 @@ class Frontend
     {
         $settings = $this->general_settings->get_settings();
         $this->enqueue_selected_fonts($settings);
-        $this->register_search_widget_assets();
+        $this->maybe_enqueue_font_awesome();
 
         $this->enqueue_script_entry(self::PUBLIC_SCRIPT_HANDLE, 'public-script');
         $this->enqueue_style_entry(self::PUBLIC_STYLE_HANDLE, 'public-style');
+    }
 
-        if (Search_Widget_Shortcode::should_enqueue_assets()) {
-            wp_enqueue_script(self::SEARCH_WIDGET_SCRIPT_HANDLE);
-            wp_enqueue_style(self::SEARCH_WIDGET_STYLE_HANDLE);
+    public function mark_module_scripts(string $tag, string $handle, string $src): string
+    {
+        if (!in_array($handle, self::MODULE_SCRIPT_HANDLES, true)) {
+            return $tag;
         }
+
+        return sprintf(
+            '<script type="module" src="%s" id="%s-js"></script>' . PHP_EOL,
+            esc_url($src),
+            esc_attr($handle)
+        );
     }
 
     public function render_custom_css(): void
@@ -79,6 +103,30 @@ class Frontend
         wp_enqueue_style(
             'barefoot-engine-public-fonts',
             $font_url,
+            [],
+            null
+        );
+    }
+
+    /**
+     * Enqueues Font Awesome from CDN unless another plugin or theme
+     * has already enqueued it under a known handle.
+     *
+     * Only checks 'enqueued' (not 'registered') because some plugins
+     * register FA handles without ever loading them, which would cause
+     * a false positive and skip our enqueue entirely.
+     */
+    private function maybe_enqueue_font_awesome(): void
+    {
+        foreach (self::FONT_AWESOME_KNOWN_HANDLES as $handle) {
+            if (wp_style_is($handle, 'enqueued')) {
+                return;
+            }
+        }
+
+        wp_enqueue_style(
+            self::FONT_AWESOME_HANDLE,
+            self::FONT_AWESOME_CDN,
             [],
             null
         );
@@ -156,30 +204,6 @@ class Frontend
         }
 
         return trim($css);
-    }
-
-    private function register_search_widget_assets(): void
-    {
-        $script = $this->manifest->find_entry_by_name('search-widget-script');
-        if (is_array($script) && !empty($script['file'])) {
-            wp_register_script(
-                self::SEARCH_WIDGET_SCRIPT_HANDLE,
-                $this->build_asset_url((string) $script['file']),
-                [],
-                BAREFOOT_ENGINE_VERSION,
-                true
-            );
-        }
-
-        $style = $this->manifest->find_entry_by_name('search-widget-style');
-        if (is_array($style) && !empty($style['file'])) {
-            wp_register_style(
-                self::SEARCH_WIDGET_STYLE_HANDLE,
-                $this->build_asset_url((string) $style['file']),
-                [],
-                BAREFOOT_ENGINE_VERSION
-            );
-        }
     }
 
     private function enqueue_script_entry(string $handle, string $entry_name): void

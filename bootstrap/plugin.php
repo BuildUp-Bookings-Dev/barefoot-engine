@@ -17,6 +17,7 @@ use BarefootEngine\Services\General_Settings;
 use BarefootEngine\Services\Property_Alias_Settings;
 use BarefootEngine\Services\Property_Sync_Service;
 use BarefootEngine\Services\Updates_Service;
+use BarefootEngine\Widgets\Search\Search_Widget_Preset_Registry;
 use BarefootEngine\Widgets\Search\Search_Widget_Shortcode;
 
 if (!defined('ABSPATH')) {
@@ -48,12 +49,13 @@ class Plugin
     private function define_public_hooks(): void
     {
         $public = new Frontend();
-        $shortcode = new Search_Widget_Shortcode();
+        $preset_registry = new Search_Widget_Preset_Registry();
+        $shortcode = new Search_Widget_Shortcode($preset_registry);
 
         $this->loader->add_action('init', $shortcode, 'register', 10, 0);
-        $this->loader->add_action('wp', $shortcode, 'detect_shortcode_usage', 10, 0);
         $this->loader->add_action('wp_enqueue_scripts', $public, 'enqueue_assets');
         $this->loader->add_action('wp_head', $public, 'render_custom_css', 20, 0);
+        $this->loader->add_filter('script_loader_tag', $public, 'mark_module_scripts', 10, 3);
     }
 
     private function define_rest_hooks(): void
