@@ -5,6 +5,7 @@ namespace BarefootEngine\Core;
 use BarefootEngine\Admin\Admin;
 use BarefootEngine\Integrations\Github_Updater;
 use BarefootEngine\Properties\Property_Admin_Actions;
+use BarefootEngine\Properties\Property_Listings_Provider;
 use BarefootEngine\Properties\Property_Metaboxes;
 use BarefootEngine\Properties\Property_Post_Type;
 use BarefootEngine\REST\Api_Integration_Controller;
@@ -17,6 +18,8 @@ use BarefootEngine\Services\General_Settings;
 use BarefootEngine\Services\Property_Alias_Settings;
 use BarefootEngine\Services\Property_Sync_Service;
 use BarefootEngine\Services\Updates_Service;
+use BarefootEngine\Widgets\Listings\Listings_Preset_Registry;
+use BarefootEngine\Widgets\Listings\Listings_Shortcode;
 use BarefootEngine\Widgets\Search\Search_Widget_Preset_Registry;
 use BarefootEngine\Widgets\Search\Search_Widget_Shortcode;
 
@@ -49,9 +52,17 @@ class Plugin
     private function define_public_hooks(): void
     {
         $public = new Frontend();
-        $preset_registry = new Search_Widget_Preset_Registry();
-        $shortcode = new Search_Widget_Shortcode($preset_registry);
+        $listings_preset_registry = new Listings_Preset_Registry();
+        $search_preset_registry = new Search_Widget_Preset_Registry();
+        $property_listings_provider = new Property_Listings_Provider();
+        $listings_shortcode = new Listings_Shortcode(
+            $listings_preset_registry,
+            $property_listings_provider,
+            $search_preset_registry
+        );
+        $shortcode = new Search_Widget_Shortcode($search_preset_registry);
 
+        $this->loader->add_action('init', $listings_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $shortcode, 'register', 10, 0);
         $this->loader->add_action('wp_enqueue_scripts', $public, 'enqueue_assets');
         $this->loader->add_action('wp_head', $public, 'render_custom_css', 20, 0);

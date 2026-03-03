@@ -8,6 +8,8 @@
 
 .barefoot-engine-search-widget {
   margin-block: 1.5rem;
+  z-index: 99999;
+  position: relative;
   width: 100%;
 }
 
@@ -15,4 +17,14 @@
   width: 100%;
   max-width: 100%;
   overflow: visible;
+}
+
+.barefoot-engine-listings {
+  margin-block: 1.5rem;
+  width: 100%;
+}
+
+.barefoot-engine-listings__mount {
+  width: 100%;
+  min-height: 720px;
 }
