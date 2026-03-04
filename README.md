@@ -110,11 +110,9 @@ To update widget versions in this plugin:
 
 - `bootstrap/`: plugin bootstrap and lifecycle classes
 - `support/`: shared infrastructure such as hook loading and the Vite manifest reader
-- `modules/`: non-widget plugin capabilities like admin, API integration, properties, and updates
-- `widgets/`: widget family PHP logic
-- `public/`: shared site-facing runtime orchestration
-- `settings/`: plugin-wide shared settings
-- `views/`: render-only PHP templates
+- `modules/`: non-admin, non-widget plugin capabilities like API integration, properties, and updates
+- `admin/`: admin-owned PHP, settings, and templates
+- `public/`: shared site-facing runtime plus widget PHP
 - `assets/src/`: source assets grouped by admin, public, and widget family
 
 Detailed naming and placement rules live in `docs/naming-conventions.md`.

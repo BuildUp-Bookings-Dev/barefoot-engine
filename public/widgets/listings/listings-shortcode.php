@@ -18,7 +18,7 @@ class Listings_Shortcode
      */
     private const DEFAULTS = [
         'widget_id' => 'default',
-        'search_widget_id' => 'default',
+        'search_widget_id' => '',
         'currency' => '$',
         'center_lat' => '14.55',
         'center_lng' => '121.03',
@@ -63,7 +63,7 @@ class Listings_Shortcode
         $wrapper_classes = ['barefoot-engine-listings', 'barefoot-engine-public'];
         $height = $this->sanitize_dimension((string) $attributes['height'], '720px');
         $widget_id = isset($attributes['widget_id']) ? (string) $attributes['widget_id'] : 'default';
-        $search_widget_id = isset($attributes['search_widget_id']) ? sanitize_title_with_dashes((string) $attributes['search_widget_id']) : 'default';
+        $search_widget_id = isset($attributes['search_widget_id']) ? sanitize_title_with_dashes((string) $attributes['search_widget_id']) : '';
 
         foreach ($this->sanitize_class_names((string) $attributes['class']) as $class_name) {
             $wrapper_classes[] = $class_name;
@@ -76,8 +76,10 @@ class Listings_Shortcode
         );
         $config['listings'] = $this->property_listings_provider->get_active_listings();
 
-        if ($search_widget_id !== '') {
-            $config['searchWidget'] = $this->search_widget_preset_registry->get($search_widget_id);
+        if ($search_widget_id !== '' && array_key_exists('search_widget_id', $raw_attributes)) {
+            $config['searchWidget'] = $this->normalize_search_widget_config(
+                $this->search_widget_preset_registry->get($search_widget_id)
+            );
         }
 
         $filtered_config = apply_filters('barefoot_engine_listings_shortcode_config', $config, $attributes);
@@ -317,8 +319,27 @@ class Listings_Shortcode
         }
 
         if (isset($filtered_config['searchWidget']) && is_array($filtered_config['searchWidget'])) {
-            $config['searchWidget'] = $filtered_config['searchWidget'];
+            $config['searchWidget'] = $this->normalize_search_widget_config($filtered_config['searchWidget']);
         }
+
+        return $config;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private function normalize_search_widget_config(array $config): array
+    {
+        $target_url = isset($config['targetUrl']) && is_string($config['targetUrl'])
+            ? trim($config['targetUrl'])
+            : '';
+
+        if ($target_url === '') {
+            $target_url = get_permalink() ?: '';
+        }
+
+        $config['targetUrl'] = $target_url;
 
         return $config;
     }

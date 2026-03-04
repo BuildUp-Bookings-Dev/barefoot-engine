@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@braudypedrosa/bp-calendar": "^1.0.3",
-    "@braudypedrosa/bp-listings": "^1.0.7",
+    "@braudypedrosa/bp-listings": "git+https://github.com/braudypedrosa/bp-listings.git",
     "@braudypedrosa/bp-search-widget": "^1.0.1",
     "alpinejs": "^3.15.8"
   }

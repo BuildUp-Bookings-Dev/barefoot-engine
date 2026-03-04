@@ -54,8 +54,8 @@ class Admin
         $active_slug = $this->resolve_active_tab($tabs);
         $active_tab = $tabs[$active_slug] ?? $tabs['updates'];
 
-        $components_dir = BAREFOOT_ENGINE_PLUGIN_DIR . 'views/admin/components/';
-        $tabs_dir = BAREFOOT_ENGINE_PLUGIN_DIR . 'views/admin/tabs/';
+        $components_dir = BAREFOOT_ENGINE_PLUGIN_DIR . 'admin/views/components/';
+        $tabs_dir = BAREFOOT_ENGINE_PLUGIN_DIR . 'admin/views/tabs/';
 
         $active_template = $tabs_dir . (string) ($active_tab['template'] ?? 'updates.php');
 
@@ -63,7 +63,7 @@ class Admin
             $active_template = $tabs_dir . 'updates.php';
         }
 
-        $view = BAREFOOT_ENGINE_PLUGIN_DIR . 'views/admin/dashboard.php';
+        $view = BAREFOOT_ENGINE_PLUGIN_DIR . 'admin/views/dashboard.php';
         if (file_exists($view)) {
             include $view;
         }

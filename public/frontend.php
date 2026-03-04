@@ -220,6 +220,8 @@ class Frontend
             BAREFOOT_ENGINE_VERSION,
             true
         );
+
+        $this->enqueue_script_entry_styles($handle, $entry);
     }
 
     private function enqueue_style_entry(string $handle, string $entry_name): void
@@ -240,5 +242,26 @@ class Frontend
     private function build_asset_url(string $file): string
     {
         return BAREFOOT_ENGINE_PLUGIN_URL . 'assets/dist/' . ltrim($file, '/');
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private function enqueue_script_entry_styles(string $handle, array $entry): void
+    {
+        $css_files = isset($entry['css']) && is_array($entry['css']) ? $entry['css'] : [];
+
+        foreach ($css_files as $index => $file) {
+            if (!is_string($file) || $file === '') {
+                continue;
+            }
+
+            wp_enqueue_style(
+                sprintf('%s-script-style-%d', $handle, $index),
+                $this->build_asset_url($file),
+                [],
+                BAREFOOT_ENGINE_VERSION
+            );
+        }
     }
 }

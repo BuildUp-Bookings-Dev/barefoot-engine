@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@source "../../../views/admin/**/*.php";
+@source "../../../admin/views/**/*.php";
 @source "./**/*.js";
 
 [x-cloak] {

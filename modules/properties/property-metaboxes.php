@@ -10,6 +10,9 @@ if (!defined('ABSPATH')) {
 
 class Property_Metaboxes
 {
+    private const GUEST_COUNT_FIELD = 'be_guest_count';
+    private const BEDROOM_COUNT_FIELD = 'be_bedroom_count';
+    private const BATHROOM_COUNT_FIELD = 'be_bathroom_count';
     private const CURATED_FIELDS = [
         'PropertyID',
         'name',
@@ -20,7 +23,9 @@ class Property_Metaboxes
         'Longitude',
         'Latitude',
         'PropertyTitle',
-        'SleepsBeds',
+        self::GUEST_COUNT_FIELD,
+        self::BEDROOM_COUNT_FIELD,
+        self::BATHROOM_COUNT_FIELD,
         'NumberFloors',
         'UnitType',
         'propAddress',
@@ -43,11 +48,13 @@ class Property_Metaboxes
             'status',
             'PropertyType',
             'PropertyTitle',
+            self::GUEST_COUNT_FIELD,
+            self::BEDROOM_COUNT_FIELD,
+            self::BATHROOM_COUNT_FIELD,
             'UnitType',
             'a259',
             'a261',
             'a267',
-            'SleepsBeds',
             'NumberFloors',
         ],
         'Location' => [
@@ -114,6 +121,7 @@ class Property_Metaboxes
             return;
         }
 
+        $display_fields = $this->build_display_fields($post->ID, $fields);
         $amenities = $this->resolve_amenities($fields, $amenity_labels, $amenity_types);
 
         echo '<div style="display:flex;flex-direction:column;gap:20px;">';
@@ -128,7 +136,7 @@ class Property_Metaboxes
                 : '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">';
 
             foreach ($keys as $key) {
-                $value = array_key_exists($key, $fields) ? $fields[$key] : null;
+                $value = array_key_exists($key, $display_fields) ? $display_fields[$key] : null;
                 $this->render_property_field_card($key, $value, $amenity_labels);
             }
 
@@ -265,6 +273,98 @@ class Property_Metaboxes
         echo '</tr>';
     }
 
+    /**
+     * @param array<string, mixed> $fields
+     * @return array<string, mixed>
+     */
+    private function build_display_fields(int $post_id, array $fields): array
+    {
+        $display_fields = $fields;
+        $display_fields[self::GUEST_COUNT_FIELD] = $this->resolve_display_count(
+            $post_id,
+            Property_Sync_Service::GUEST_COUNT_META_KEY,
+            [$fields['SleepsBeds'] ?? null, $fields['a53'] ?? null]
+        );
+        $display_fields[self::BEDROOM_COUNT_FIELD] = $this->resolve_display_count(
+            $post_id,
+            Property_Sync_Service::BEDROOM_COUNT_META_KEY,
+            [$fields['a56'] ?? null, $this->parse_count_from_text($fields['a259'] ?? null, 'bed'), $this->parse_count_from_text($fields['PropertyTitle'] ?? null, 'bed')]
+        );
+        $display_fields[self::BATHROOM_COUNT_FIELD] = $this->resolve_display_count(
+            $post_id,
+            Property_Sync_Service::BATHROOM_COUNT_META_KEY,
+            [$fields['a195'] ?? null, $this->parse_count_from_text($fields['a259'] ?? null, 'bath'), $this->parse_count_from_text($fields['PropertyTitle'] ?? null, 'bath')]
+        );
+
+        return $display_fields;
+    }
+
+    /**
+     * @param array<int, mixed> $fallbacks
+     */
+    private function resolve_display_count(int $post_id, string $meta_key, array $fallbacks): string
+    {
+        $stored = get_post_meta($post_id, $meta_key, true);
+        $normalized = $this->normalize_count_value($stored);
+        if ($normalized !== '') {
+            return $normalized;
+        }
+
+        foreach ($fallbacks as $fallback) {
+            $normalized = $this->normalize_count_value($fallback);
+            if ($normalized !== '') {
+                return $normalized;
+            }
+        }
+
+        return '';
+    }
+
+    private function normalize_count_value(mixed $value): string
+    {
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $normalized = trim((string) $value);
+        if ($normalized === '' || !is_numeric($normalized)) {
+            return '';
+        }
+
+        $numeric = (float) $normalized;
+        if ($numeric < 0) {
+            return '';
+        }
+
+        if (abs($numeric - floor($numeric)) < 0.00001) {
+            return (string) (int) round($numeric);
+        }
+
+        return rtrim(rtrim(number_format($numeric, 2, '.', ''), '0'), '.');
+    }
+
+    private function parse_count_from_text(mixed $value, string $kind): string
+    {
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $text = trim((string) $value);
+        if ($text === '') {
+            return '';
+        }
+
+        $pattern = $kind === 'bath'
+            ? '/(\d+(?:\.\d+)?)\s*(?:bathroom|bathrooms|bath|baths|ba)\b/i'
+            : '/(\d+(?:\.\d+)?)\s*(?:bedroom|bedrooms|bed|beds)\b/i';
+
+        if (preg_match($pattern, $text, $matches) !== 1) {
+            return '';
+        }
+
+        return $this->normalize_count_value($matches[1] ?? '');
+    }
+
     private function should_render_large_value(string $value): bool
     {
         return str_contains($value, "\n") || strlen($value) > 120;
@@ -283,6 +383,7 @@ class Property_Metaboxes
     private function render_property_field_card(string $key, mixed $value, array $amenity_labels): void
     {
         $label = $this->resolve_field_label($key, $amenity_labels);
+        $secondary_label = $this->resolve_secondary_key_label($key);
         $normalized_value = is_scalar($value) ? trim((string) $value) : '';
         $is_empty = $normalized_value === '';
         $is_long_text = !$is_empty && $this->should_render_large_value($normalized_value);
@@ -290,7 +391,9 @@ class Property_Metaboxes
         echo '<article style="border:1px solid #dcdcde;border-radius:12px;background:#fff;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0;">';
         echo '<div style="display:flex;flex-direction:column;gap:2px;">';
         echo '<strong style="font-size:13px;line-height:1.4;color:#1d2327;">' . esc_html($label) . '</strong>';
-        echo '<code style="font-size:11px;color:#646970;background:none;padding:0;">' . esc_html($key) . '</code>';
+        if ($secondary_label !== '') {
+            echo '<code style="font-size:11px;color:#646970;background:none;padding:0;">' . esc_html($secondary_label) . '</code>';
+        }
         echo '</div>';
         echo '<div>';
 
@@ -308,6 +411,14 @@ class Property_Metaboxes
 
         echo '</div>';
         echo '</article>';
+    }
+
+    private function resolve_secondary_key_label(string $key): string
+    {
+        return match ($key) {
+            self::GUEST_COUNT_FIELD, self::BEDROOM_COUNT_FIELD, self::BATHROOM_COUNT_FIELD => '',
+            default => $key,
+        };
     }
 
     /**
@@ -451,6 +562,18 @@ class Property_Metaboxes
         $normalized_key = trim($key);
         if ($normalized_key === '') {
             return '';
+        }
+
+        if ($normalized_key === self::GUEST_COUNT_FIELD) {
+            return __('Sleeps', 'barefoot-engine');
+        }
+
+        if ($normalized_key === self::BEDROOM_COUNT_FIELD) {
+            return __('Bedrooms', 'barefoot-engine');
+        }
+
+        if ($normalized_key === self::BATHROOM_COUNT_FIELD) {
+            return __('Bathrooms', 'barefoot-engine');
         }
 
         if (isset($amenity_labels[$normalized_key]) && is_string($amenity_labels[$normalized_key])) {

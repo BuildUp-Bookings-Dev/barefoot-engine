@@ -4,11 +4,9 @@
 
 - `bootstrap/`: plugin bootstrap and lifecycle classes only
 - `support/`: tiny shared infrastructure only
-- `modules/`: non-widget business capabilities only
-- `widgets/`: widget-family PHP logic only
-- `public/`: shared site-facing runtime behavior only
-- `settings/`: plugin-wide shared settings only
-- `views/`: render-only PHP templates only
+- `modules/`: non-admin, non-widget business capabilities only
+- `admin/`: admin-owned PHP, settings, and templates only
+- `public/`: shared site-facing runtime and widget-family PHP logic only
 - `assets/src/`: source assets grouped by runtime surface
 
 ## Path Rules
@@ -23,24 +21,23 @@
 
 - Put plugin startup and lifecycle wiring in `bootstrap/`.
 - Put shared infrastructure like the hook loader and asset manifest reader in `support/`.
-- Put non-widget capabilities in `modules/`.
-- Put each widget family in its own `widgets/<widget-name>/` directory.
+- Put non-admin, non-widget capabilities in `modules/`.
+- Put admin-owned PHP, settings, and templates in `admin/`.
 - Put shared site-facing orchestration in `public/`.
-- Put shared plugin-wide settings in `settings/`.
-- Put render-only PHP in `views/`.
+- Put each widget family in its own `public/widgets/<widget-name>/` directory.
 
-## Views
+## Templates
 
-- Views render prepared data only.
-- Views must not instantiate services, register hooks, or persist data.
-- Admin templates belong in `views/admin/`.
-- Future widget or module templates should mirror their owner, for example `views/example-widget/`.
+- Templates render prepared data only.
+- Templates must not instantiate services, register hooks, or persist data.
+- Admin templates belong in `admin/views/`.
+- Future public-facing templates should live under `public/views/` if they are introduced later.
 
 ## Assets
 
 - Admin assets belong in `assets/src/admin/`.
 - Shared public assets belong in `assets/src/public/`.
-- Widget assets belong in `assets/src/widgets/<widget-name>/` when a widget is active in the plugin.
+- Widget assets currently flow through `assets/src/public/` unless a dedicated widget asset surface is introduced later.
 
 ## Exemptions
 
@@ -74,9 +71,9 @@ These directories are excluded from naming enforcement:
 Good:
 
 - `modules/api-integration/api-integration-controller.php`
-- `widgets/example-widget/example-widget-shortcode.php`
-- `assets/src/widgets/example-widget/index.js`
-- `views/admin/tabs/properties.php`
+- `public/widgets/example-widget/example-widget-shortcode.php`
+- `assets/src/public/index.js`
+- `admin/views/tabs/properties.php`
 
 Bad:
 

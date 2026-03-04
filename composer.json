@@ -13,9 +13,8 @@
       "bootstrap/",
       "support/",
       "modules/",
-      "widgets/",
-      "public/",
-      "settings/"
+      "admin/",
+      "public/"
     ]
   },
   "config": {

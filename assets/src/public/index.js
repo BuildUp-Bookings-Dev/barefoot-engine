@@ -1,5 +1,5 @@
 import { BPCalendar, BP_Calendar } from '@braudypedrosa/bp-calendar';
-import listingsMapModule from '@braudypedrosa/bp-listings';
+import listingsMapModule from './bp-listings-runtime.js';
 import { BPSearchWidget, BP_SearchWidget } from '@braudypedrosa/bp-search-widget';
 
 const SEARCH_WIDGET_SELECTOR = '[data-be-search-widget]';
@@ -91,12 +91,40 @@ function bootListingsWidgets() {
       ? allListings.filter((listing) => matchListing(listing, initialSearchPayload, fieldTypeMap))
       : allListings;
     const { searchWidget, ...widgetConfig } = config;
+    const hasSelectedCheckIn = typeof initialSearchPayload.checkIn === 'string' && initialSearchPayload.checkIn.trim() !== '';
+
+    mountNode.classList.toggle('be-listings-initial-pricing', !hasSelectedCheckIn);
 
     try {
       const widget = listingsApi.init({
         container: mountNode,
         ...widgetConfig,
         listings: filteredListings,
+        renderSearchSlot: searchWidgetConfig
+          ? (containerEl) => {
+            if (!(containerEl instanceof HTMLElement)) {
+              return undefined;
+            }
+
+            const host = document.createElement('div');
+            host.className = 'barefoot-engine-listings__search-slot';
+            containerEl.appendChild(host);
+
+            const { targetUrl = '', ...searchOptions } = searchWidgetConfig;
+            const searchWidget = new BPSearchWidget(host, {
+              ...searchOptions,
+              onSearch: (payload) => {
+                redirectToSearchResults(targetUrl, payload);
+              },
+            });
+
+            return () => {
+              if (typeof searchWidget.destroy === 'function') {
+                searchWidget.destroy();
+              }
+            };
+          }
+          : undefined,
         onListingClick: (listing) => {
           if (typeof listing?.permalink === 'string' && listing.permalink.trim() !== '') {
             window.location.assign(listing.permalink);

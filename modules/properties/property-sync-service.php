@@ -14,6 +14,9 @@ if (!defined('ABSPATH')) {
 class Property_Sync_Service
 {
     public const SYNC_STATE_OPTION_KEY = 'barefoot_engine_property_sync_state';
+    public const GUEST_COUNT_META_KEY = '_be_property_guest_count';
+    public const BEDROOM_COUNT_META_KEY = '_be_property_bedroom_count';
+    public const BATHROOM_COUNT_META_KEY = '_be_property_bathroom_count';
     private const QUERYABLE_META_INDEX_KEY = '_be_property_queryable_meta_keys';
     private const QUERYABLE_META_PREFIX = '_be_property_api_';
     private const DEFAULT_RATES_WINDOW_DAYS = 365;
@@ -1089,8 +1092,16 @@ class Property_Sync_Service
         $status_changed = ($existing['post_status'] ?? '') !== 'publish';
         $import_status_changed = ($existing['import_status'] ?? '') !== 'active';
         $title_changed = $next_title !== (string) ($existing['title'] ?? '');
+        $needs_canonical_meta_backfill = $this->needs_canonical_meta_backfill($post_id);
 
-        if (!$force_update && !$hash_changed && !$status_changed && !$import_status_changed && !$title_changed) {
+        if (
+            !$force_update
+            && !$hash_changed
+            && !$status_changed
+            && !$import_status_changed
+            && !$title_changed
+            && !$needs_canonical_meta_backfill
+        ) {
             update_post_meta($post_id, '_be_property_last_synced_at', $timestamp);
 
             return [
@@ -1113,7 +1124,7 @@ class Property_Sync_Service
             return $updated;
         }
 
-        if ($force_update || $hash_changed) {
+        if ($force_update || $hash_changed || $needs_canonical_meta_backfill) {
             $this->persist_property_meta($post_id, $property, $timestamp, 'active', $amenity_labels, $amenity_types);
         } else {
             update_post_meta($post_id, '_be_property_import_status', 'active');
@@ -1172,6 +1183,7 @@ class Property_Sync_Service
         update_post_meta($post_id, '_be_property_fields', $storage['fields']);
         update_post_meta($post_id, '_be_property_field_order', $storage['field_order']);
         $this->persist_queryable_field_meta($post_id, $storage['raw_fields'], !empty($property['preserve_existing_queryable_meta']));
+        $this->persist_canonical_property_meta($post_id, $storage['fields']);
         update_post_meta($post_id, '_be_property_images', $images);
         update_post_meta($post_id, '_be_property_images_raw_xml', $images_raw_xml);
         update_post_meta($post_id, '_be_property_rates', $rates);
@@ -1321,6 +1333,171 @@ class Property_Sync_Service
             self::QUERYABLE_META_INDEX_KEY,
             array_values(array_unique(array_merge($previous_meta_keys, $next_meta_keys)))
         );
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     */
+    private function persist_canonical_property_meta(int $post_id, array $fields): void
+    {
+        $canonical = $this->resolve_canonical_property_meta($fields);
+
+        $this->update_or_delete_meta($post_id, self::GUEST_COUNT_META_KEY, $canonical['guest_count']);
+        $this->update_or_delete_meta($post_id, self::BEDROOM_COUNT_META_KEY, $canonical['bedroom_count']);
+        $this->update_or_delete_meta($post_id, self::BATHROOM_COUNT_META_KEY, $canonical['bathroom_count']);
+    }
+
+    private function needs_canonical_meta_backfill(int $post_id): bool
+    {
+        foreach ([self::GUEST_COUNT_META_KEY, self::BEDROOM_COUNT_META_KEY, self::BATHROOM_COUNT_META_KEY] as $meta_key) {
+            if (!metadata_exists('post', $post_id, $meta_key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @return array{guest_count: string|null, bedroom_count: string|null, bathroom_count: string|null}
+     */
+    private function resolve_canonical_property_meta(array $fields): array
+    {
+        return [
+            'guest_count' => $this->resolve_guest_count_value($fields),
+            'bedroom_count' => $this->resolve_bedroom_count_value($fields),
+            'bathroom_count' => $this->resolve_bathroom_count_value($fields),
+        ];
+    }
+
+    private function resolve_guest_count_value(array $fields): ?string
+    {
+        foreach (['a53', 'SleepsBeds', 'occupancy'] as $key) {
+            $normalized = $this->normalize_positive_integer_string($fields[$key] ?? null);
+            if ($normalized !== null) {
+                return $normalized;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolve_bedroom_count_value(array $fields): ?string
+    {
+        $normalized = $this->normalize_non_negative_integer_string($fields['a56'] ?? null);
+        if ($normalized !== null) {
+            return $normalized;
+        }
+
+        foreach (['a259', 'PropertyTitle'] as $key) {
+            $parsed = $this->parse_count_from_text($fields[$key] ?? null, ['bedroom', 'bedrooms', 'bed', 'beds']);
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolve_bathroom_count_value(array $fields): ?string
+    {
+        $normalized = $this->normalize_non_negative_number_string($fields['a195'] ?? null);
+        if ($normalized !== null) {
+            return $normalized;
+        }
+
+        foreach (['a259', 'PropertyTitle'] as $key) {
+            $parsed = $this->parse_count_from_text($fields[$key] ?? null, ['bathroom', 'bathrooms', 'bath', 'baths', 'ba']);
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param mixed $value
+     * @param array<int, string> $tokens
+     */
+    private function parse_count_from_text(mixed $value, array $tokens): ?string
+    {
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        $text = trim((string) $value);
+        if ($text === '') {
+            return null;
+        }
+
+        $token_pattern = implode('|', array_map(static fn(string $token): string => preg_quote($token, '/'), $tokens));
+        if (preg_match('/(\d+(?:\.\d+)?)\s*(?:' . $token_pattern . ')\b/i', $text, $matches) !== 1) {
+            return null;
+        }
+
+        return $this->normalize_non_negative_number_string($matches[1] ?? null);
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalize_positive_integer_string(mixed $value): ?string
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $numeric = (int) round((float) $value);
+
+        return $numeric > 0 ? (string) $numeric : null;
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalize_non_negative_integer_string(mixed $value): ?string
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $numeric = (int) round((float) $value);
+
+        return $numeric >= 0 ? (string) $numeric : null;
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalize_non_negative_number_string(mixed $value): ?string
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $numeric = (float) $value;
+        if ($numeric < 0) {
+            return null;
+        }
+
+        if (abs($numeric - floor($numeric)) < 0.00001) {
+            return (string) (int) round($numeric);
+        }
+
+        return rtrim(rtrim(number_format($numeric, 2, '.', ''), '0'), '.');
+    }
+
+    private function update_or_delete_meta(int $post_id, string $meta_key, ?string $value): void
+    {
+        if ($value === null || $value === '') {
+            delete_post_meta($post_id, $meta_key);
+
+            return;
+        }
+
+        update_post_meta($post_id, $meta_key, $value);
     }
 
     private function build_queryable_meta_key(string $field_key): string

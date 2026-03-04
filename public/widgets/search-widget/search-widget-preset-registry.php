@@ -26,6 +26,10 @@ class Search_Widget_Preset_Registry
         'calendarOptions' => [
             'monthsToShow' => 1,
             'datepickerPlacement' => 'auto',
+            'defaultMinDays' => 1,
+            'tooltipLabel' => 'Nights',
+            'showTooltip' => true,
+            'showClearButton' => true,
         ],
     ];
 
@@ -175,6 +179,22 @@ class Search_Widget_Preset_Registry
                 $calendar_options['datepickerPlacement'] = $this->sanitize_text((string) $preset['calendarOptions']['datepickerPlacement']);
             }
 
+            if (array_key_exists('defaultMinDays', $preset['calendarOptions'])) {
+                $calendar_options['defaultMinDays'] = $this->normalize_min_days($preset['calendarOptions']['defaultMinDays']);
+            }
+
+            if (array_key_exists('tooltipLabel', $preset['calendarOptions'])) {
+                $calendar_options['tooltipLabel'] = $this->sanitize_text((string) $preset['calendarOptions']['tooltipLabel']);
+            }
+
+            if (array_key_exists('showTooltip', $preset['calendarOptions'])) {
+                $calendar_options['showTooltip'] = $this->normalize_boolean($preset['calendarOptions']['showTooltip'], true);
+            }
+
+            if (array_key_exists('showClearButton', $preset['calendarOptions'])) {
+                $calendar_options['showClearButton'] = $this->normalize_boolean($preset['calendarOptions']['showClearButton'], true);
+            }
+
             if (!empty($calendar_options)) {
                 $normalized['calendarOptions'] = $calendar_options;
             }
@@ -249,6 +269,16 @@ class Search_Widget_Preset_Registry
         $months = is_numeric($value) ? (int) $value : 1;
 
         return max(1, min(6, $months));
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalize_min_days($value): int
+    {
+        $days = is_numeric($value) ? (int) $value : 1;
+
+        return max(1, $days);
     }
 
     private function sanitize_target_url(string $url): string

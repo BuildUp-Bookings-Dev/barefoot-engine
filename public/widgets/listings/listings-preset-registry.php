@@ -24,6 +24,44 @@ class Listings_Preset_Registry
         'showSort' => true,
         'showPagination' => true,
         'pageSize' => 12,
+        'searchWidget' => [
+            'targetUrl' => '',
+            'showLocation' => false,
+            'showFilterButton' => false,
+            'locationLabel' => 'Location',
+            'locationPlaceholder' => 'Where are you going?',
+            'dateLabel' => 'Dates',
+            'datePlaceholder' => 'Check in — Check out',
+            'fields' => [
+                [
+                    'label' => 'Bedrooms',
+                    'type' => 'select',
+                    'options' => ['1', '2', '3', '4+'],
+                    'position' => 'end',
+                    'required' => false,
+                    'key' => 'bedrooms',
+                    'icon' => 'fa-solid fa-bed',
+                ],
+                [
+                    'label' => 'Bathrooms',
+                    'type' => 'select',
+                    'options' => ['1', '2', '3', '4+'],
+                    'position' => 'end',
+                    'required' => false,
+                    'key' => 'bathrooms',
+                    'icon' => 'fa-solid fa-bath',
+                ],
+            ],
+            'filters' => [],
+            'calendarOptions' => [
+                'monthsToShow' => 2,
+                'datepickerPlacement' => 'auto',
+                'defaultMinDays' => 1,
+                'tooltipLabel' => 'Nights',
+                'showTooltip' => true,
+                'showClearButton' => true,
+            ],
+        ],
     ];
 
     /**
@@ -172,6 +210,10 @@ class Listings_Preset_Registry
             $normalized['pageSize'] = $this->normalize_page_size($preset['pageSize']);
         }
 
+        if (isset($preset['searchWidget']) && is_array($preset['searchWidget'])) {
+            $normalized['searchWidget'] = $this->normalize_search_widget_config($preset['searchWidget']);
+        }
+
         return $normalized;
     }
 
@@ -276,6 +318,86 @@ class Listings_Preset_Registry
         }
 
         return min(100, $numeric);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private function normalize_search_widget_config(array $config): array
+    {
+        $normalized = [];
+
+        if (array_key_exists('targetUrl', $config)) {
+            $target_url = trim(esc_url_raw((string) $config['targetUrl']));
+            $normalized['targetUrl'] = $target_url;
+        }
+
+        if (array_key_exists('showLocation', $config)) {
+            $normalized['showLocation'] = $this->normalize_boolean($config['showLocation'], true);
+        }
+
+        if (array_key_exists('showFilterButton', $config)) {
+            $normalized['showFilterButton'] = $this->normalize_boolean($config['showFilterButton'], false);
+        }
+
+        if (array_key_exists('locationLabel', $config)) {
+            $normalized['locationLabel'] = sanitize_text_field((string) $config['locationLabel']);
+        }
+
+        if (array_key_exists('locationPlaceholder', $config)) {
+            $normalized['locationPlaceholder'] = sanitize_text_field((string) $config['locationPlaceholder']);
+        }
+
+        if (array_key_exists('dateLabel', $config)) {
+            $normalized['dateLabel'] = sanitize_text_field((string) $config['dateLabel']);
+        }
+
+        if (array_key_exists('datePlaceholder', $config)) {
+            $normalized['datePlaceholder'] = sanitize_text_field((string) $config['datePlaceholder']);
+        }
+
+        if (array_key_exists('fields', $config)) {
+            $normalized['fields'] = is_array($config['fields']) ? array_values($config['fields']) : [];
+        }
+
+        if (array_key_exists('filters', $config)) {
+            $normalized['filters'] = is_array($config['filters']) ? array_values($config['filters']) : [];
+        }
+
+        if (isset($config['calendarOptions']) && is_array($config['calendarOptions'])) {
+            $calendar_options = [];
+
+            if (array_key_exists('monthsToShow', $config['calendarOptions'])) {
+                $calendar_options['monthsToShow'] = max(1, min(6, (int) $config['calendarOptions']['monthsToShow']));
+            }
+
+            if (array_key_exists('datepickerPlacement', $config['calendarOptions'])) {
+                $calendar_options['datepickerPlacement'] = sanitize_text_field((string) $config['calendarOptions']['datepickerPlacement']);
+            }
+
+            if (array_key_exists('defaultMinDays', $config['calendarOptions'])) {
+                $calendar_options['defaultMinDays'] = max(1, (int) $config['calendarOptions']['defaultMinDays']);
+            }
+
+            if (array_key_exists('tooltipLabel', $config['calendarOptions'])) {
+                $calendar_options['tooltipLabel'] = sanitize_text_field((string) $config['calendarOptions']['tooltipLabel']);
+            }
+
+            if (array_key_exists('showTooltip', $config['calendarOptions'])) {
+                $calendar_options['showTooltip'] = $this->normalize_boolean($config['calendarOptions']['showTooltip'], true);
+            }
+
+            if (array_key_exists('showClearButton', $config['calendarOptions'])) {
+                $calendar_options['showClearButton'] = $this->normalize_boolean($config['calendarOptions']['showClearButton'], true);
+            }
+
+            if (!empty($calendar_options)) {
+                $normalized['calendarOptions'] = $calendar_options;
+            }
+        }
+
+        return $normalized;
     }
 
     /**

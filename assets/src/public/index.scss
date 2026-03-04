@@ -1,10 +1,5 @@
 @use '@braudypedrosa/bp-calendar/styles' as bp_calendar;
-@use '@braudypedrosa/bp-listings/styles' as bp_listings;
 @use '@braudypedrosa/bp-search-widget/styles' as bp_search_widget;
-
-.barefoot-engine-public {
-  border-top: 2px solid #0ea5e9;
-}
 
 .barefoot-engine-search-widget {
   margin-block: 1.5rem;
@@ -27,4 +22,16 @@
 .barefoot-engine-listings__mount {
   width: 100%;
   min-height: 720px;
+}
+
+.barefoot-engine-listings .lm-heart-btn {
+  display: none !important;
+}
+
+.barefoot-engine-listings__mount.be-listings-initial-pricing .lm-card-price-value::before {
+  content: 'Starts at ';
+}
+
+.bp-calendar-tooltip {
+  z-index: 999999 !important;
 }
