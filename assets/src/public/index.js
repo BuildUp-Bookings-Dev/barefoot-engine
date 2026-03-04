@@ -5,6 +5,7 @@ import { BPSearchWidget, BP_SearchWidget } from '@braudypedrosa/bp-search-widget
 const SEARCH_WIDGET_SELECTOR = '[data-be-search-widget]';
 const LISTINGS_SELECTOR = '[data-be-listings]';
 const ListingsMap = listingsMapModule?.ListingsMap ?? listingsMapModule ?? null;
+const AJAX_SEARCH_MIN_BUFFER_MS = 1500;
 
 if (typeof window !== 'undefined') {
   if (!window.BPCalendar) {
@@ -87,7 +88,8 @@ function bootListingsWidgets() {
     const searchWidgetConfig = isPlainObject(config.searchWidget) ? config.searchWidget : null;
     const fieldTypeMap = buildFieldTypeMap(searchWidgetConfig);
     const initialSearchPayload = parseSearchPayloadFromUrl(window.location.search);
-    const filteredListings = hasSearchPayload(initialSearchPayload)
+    const hasInitialSearch = hasSearchPayload(initialSearchPayload);
+    const filteredListings = hasInitialSearch
       ? allListings.filter((listing) => matchListing(listing, initialSearchPayload, fieldTypeMap))
       : allListings;
     const { searchWidget, ...widgetConfig } = config;
@@ -114,9 +116,19 @@ function bootListingsWidgets() {
             const searchWidget = new BPSearchWidget(host, {
               ...searchOptions,
               onSearch: (payload) => {
-                redirectToSearchResults(targetUrl, payload);
+                if (shouldRedirectListingsSearch(targetUrl)) {
+                  redirectToSearchResults(targetUrl, payload);
+                  return;
+                }
+
+                runAjaxListingsSearch(mountNode, fieldTypeMap, payload);
               },
             });
+
+            if (hasInitialSearch) {
+              applySearchPayloadToWidgetState(searchWidget, initialSearchPayload);
+            }
+            mountNode.beEmbeddedSearchWidget = searchWidget;
 
             return () => {
               if (typeof searchWidget.destroy === 'function') {
@@ -133,7 +145,12 @@ function bootListingsWidgets() {
       });
       mountNode.beAllListings = allListings;
       mountNode.beListingsWidget = widget;
+      mountNode.beHasActiveSearch = hasInitialSearch;
       mountNode.dataset.beListingsReady = 'true';
+      alignToolbarControls(mountNode);
+      updateClearSearchButton(mountNode);
+      updateListingsCount(mountNode, filteredListings.length);
+      maybeRefineListingsWithAvailability(mountNode, fieldTypeMap, initialSearchPayload);
     } catch (error) {
       console.error('[barefoot-engine] Failed to initialize listings widget.', error);
     }
@@ -164,7 +181,7 @@ function redirectToSearchResults(targetUrl, payload) {
   const url = new URL(targetUrl || window.location.href, window.location.origin);
   const params = new URLSearchParams(url.search);
 
-  clearManagedParams(params, payload);
+  clearManagedParams(params);
 
   appendQueryValue(params, 'location', payload?.location);
   appendQueryValue(params, 'check_in', payload?.checkIn);
@@ -186,24 +203,18 @@ function redirectToSearchResults(targetUrl, payload) {
   window.location.assign(url.toString());
 }
 
-function clearManagedParams(params, payload) {
-  params.delete('location');
-  params.delete('check_in');
-  params.delete('check_out');
+function clearManagedParams(params) {
+  const keysToDelete = [];
 
-  if (payload?.customFields && typeof payload.customFields === 'object') {
-    Object.keys(payload.customFields).forEach((key) => {
-      params.delete(`field_${key}`);
-      params.delete(`field_${key}[]`);
-    });
-  }
+  params.forEach((_, key) => {
+    if (key === 'location' || key === 'check_in' || key === 'check_out' || key.startsWith('field_') || key.startsWith('filter_')) {
+      keysToDelete.push(key);
+    }
+  });
 
-  if (payload?.filters && typeof payload.filters === 'object') {
-    Object.keys(payload.filters).forEach((key) => {
-      params.delete(`filter_${key}`);
-      params.delete(`filter_${key}[]`);
-    });
-  }
+  keysToDelete.forEach((key) => {
+    params.delete(key);
+  });
 }
 
 function appendQueryValue(params, key, value) {
@@ -499,6 +510,491 @@ function isGuestKey(key) {
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function beginListingsSearch(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return Number.NaN;
+  }
+
+  const token = (Number(mountNode.beSearchToken) || 0) + 1;
+  mountNode.beSearchToken = token;
+  setListingsSearching(mountNode, true);
+  return token;
+}
+
+function getRemainingSearchBufferMs(startedAt) {
+  if (!Number.isFinite(startedAt)) {
+    return 0;
+  }
+
+  return Math.max(0, AJAX_SEARCH_MIN_BUFFER_MS - (Date.now() - startedAt));
+}
+
+function finishListingsSearch(mountNode, token, startedAt = Number.NaN) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const finalize = () => {
+    if (Number(mountNode.beSearchToken) !== Number(token)) {
+      return;
+    }
+
+    setListingsSearching(mountNode, false);
+  };
+
+  const remainingMs = getRemainingSearchBufferMs(startedAt);
+  if (remainingMs > 0) {
+    window.setTimeout(finalize, remainingMs);
+    return;
+  }
+
+  finalize();
+}
+
+function maybeRefineListingsWithAvailability(mountNode, fieldTypeMap, payload, searchContext = {}) {
+  const token = Number.isFinite(searchContext?.token)
+    ? Number(searchContext.token)
+    : beginListingsSearch(mountNode);
+  const startedAt = Number.isFinite(searchContext?.startedAt)
+    ? Number(searchContext.startedAt)
+    : Number.NaN;
+
+  if (!(mountNode instanceof HTMLElement) || !hasValidDateRangePayload(payload)) {
+    finishListingsSearch(mountNode, token, startedAt);
+    return;
+  }
+
+  const restUrl = buildAvailabilitySearchUrl();
+  if (!restUrl) {
+    finishListingsSearch(mountNode, token, startedAt);
+    return;
+  }
+
+  fetch(restUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      check_in: payload.checkIn,
+      check_out: payload.checkOut,
+      force_refresh: false,
+    }),
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' && data.message.trim() !== ''
+          ? data.message
+          : 'Live availability unavailable. Showing locally cached results.';
+        throw new Error(message);
+      }
+
+      return data;
+    })
+    .then((response) => {
+      const availablePropertyIds = Array.isArray(response?.data?.available_property_ids)
+        ? response.data.available_property_ids
+          .map((propertyId) => String(propertyId ?? '').trim())
+          .filter(Boolean)
+        : [];
+
+      const availableLookup = new Set(availablePropertyIds);
+      const allListings = Array.isArray(mountNode.beAllListings) ? mountNode.beAllListings : [];
+      const refinedListings = allListings
+        .filter((listing) => {
+          const propertyId = typeof listing?.propertyId === 'string'
+            ? listing.propertyId.trim()
+            : String(listing?.propertyId ?? '').trim();
+
+          return propertyId !== '' && availableLookup.has(propertyId);
+        })
+        .filter((listing) => matchListing(listing, payload, fieldTypeMap));
+
+      if (mountNode.beListingsWidget && typeof mountNode.beListingsWidget.setListings === 'function') {
+        mountNode.beListingsWidget.setListings(refinedListings);
+      }
+      updateListingsCount(mountNode, refinedListings.length);
+
+      finishListingsSearch(mountNode, token, startedAt);
+    })
+    .catch((error) => {
+      console.warn('[barefoot-engine] Failed to refine listings with live availability.', error);
+      finishListingsSearch(mountNode, token, startedAt);
+    });
+}
+
+function runAjaxListingsSearch(mountNode, fieldTypeMap, payload) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  mountNode.beHasActiveSearch = hasSearchPayload(payload);
+  updateClearSearchButton(mountNode);
+  const searchStartedAt = Date.now();
+  const searchToken = beginListingsSearch(mountNode);
+  syncSearchPayloadToCurrentUrl(payload);
+
+  const hasSelectedCheckIn = typeof payload?.checkIn === 'string' && payload.checkIn.trim() !== '';
+  mountNode.classList.toggle('be-listings-initial-pricing', !hasSelectedCheckIn);
+
+  const allListings = Array.isArray(mountNode.beAllListings) ? mountNode.beAllListings : [];
+  const filteredListings = hasSearchPayload(payload)
+    ? allListings.filter((listing) => matchListing(listing, payload, fieldTypeMap))
+    : allListings;
+
+  if (mountNode.beListingsWidget && typeof mountNode.beListingsWidget.setListings === 'function') {
+    mountNode.beListingsWidget.setListings(filteredListings);
+  }
+
+  updateListingsCount(mountNode, filteredListings.length);
+
+  if (!hasValidDateRangePayload(payload)) {
+    finishListingsSearch(mountNode, searchToken, searchStartedAt);
+    return;
+  }
+
+  maybeRefineListingsWithAvailability(mountNode, fieldTypeMap, payload, {
+    token: searchToken,
+    startedAt: searchStartedAt,
+  });
+}
+
+function hasValidDateRangePayload(payload) {
+  return isValidDateString(payload?.checkIn)
+    && isValidDateString(payload?.checkOut)
+    && payload.checkOut > payload.checkIn;
+}
+
+function buildAvailabilitySearchUrl() {
+  const bootstrap = typeof window !== 'undefined' && isPlainObject(window.BarefootEnginePublic)
+    ? window.BarefootEnginePublic
+    : {};
+  const restBase = typeof bootstrap.restBase === 'string' ? bootstrap.restBase : '';
+  const endpoint = typeof bootstrap.availabilitySearchEndpoint === 'string'
+    ? bootstrap.availabilitySearchEndpoint
+    : 'availability/search';
+
+  if (!restBase) {
+    return '';
+  }
+
+  return new URL(endpoint, restBase).toString();
+}
+
+function shouldRedirectListingsSearch(targetUrl) {
+  const target = new URL(targetUrl || window.location.href, window.location.origin);
+
+  return target.pathname !== window.location.pathname;
+}
+
+function syncSearchPayloadToCurrentUrl(payload) {
+  const url = new URL(window.location.href);
+  const params = new URLSearchParams(url.search);
+
+  clearManagedParams(params);
+
+  appendQueryValue(params, 'location', payload?.location);
+  appendQueryValue(params, 'check_in', payload?.checkIn);
+  appendQueryValue(params, 'check_out', payload?.checkOut);
+
+  if (payload?.customFields && typeof payload.customFields === 'object') {
+    Object.entries(payload.customFields).forEach(([key, value]) => {
+      appendQueryValue(params, `field_${key}`, value);
+    });
+  }
+
+  if (payload?.filters && typeof payload.filters === 'object') {
+    Object.entries(payload.filters).forEach(([key, value]) => {
+      appendQueryValue(params, `filter_${key}`, value);
+    });
+  }
+
+  url.search = params.toString();
+  window.history.replaceState({}, '', url.toString());
+}
+
+function ensureListingsMeta(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return null;
+  }
+
+  const toolbarLeft = mountNode.querySelector('.lm-toolbar .lm-toolbar-left');
+  if (!(toolbarLeft instanceof HTMLElement)) {
+    return null;
+  }
+
+  const existing = toolbarLeft.querySelector('.barefoot-engine-listings__meta');
+  if (existing instanceof HTMLElement) {
+    return existing;
+  }
+
+  const metaNode = document.createElement('div');
+  metaNode.className = 'barefoot-engine-listings__meta';
+
+  const countNode = document.createElement('p');
+  countNode.className = 'barefoot-engine-listings__count';
+  countNode.textContent = '';
+  metaNode.appendChild(countNode);
+
+  const searchingNode = document.createElement('p');
+  searchingNode.className = 'barefoot-engine-listings__searching';
+  searchingNode.hidden = true;
+  searchingNode.innerHTML = '<span class="barefoot-engine-listings__searching-dot" aria-hidden="true"></span><span>Search in progress</span>';
+  metaNode.appendChild(searchingNode);
+
+  toolbarLeft.prepend(metaNode);
+
+  return metaNode;
+}
+
+function ensureListingsSkeleton(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return null;
+  }
+
+  const gridNode = mountNode.querySelector('.lm-listings-grid');
+  if (!(gridNode instanceof HTMLElement) || !(gridNode.parentElement instanceof HTMLElement)) {
+    return null;
+  }
+
+  const existing = mountNode.querySelector('.barefoot-engine-listings__skeleton-grid');
+  if (existing instanceof HTMLElement) {
+    return existing;
+  }
+
+  const skeletonGrid = document.createElement('div');
+  skeletonGrid.className = 'lm-listings-grid barefoot-engine-listings__skeleton-grid';
+
+  for (let index = 0; index < 6; index += 1) {
+    const card = document.createElement('div');
+    card.className = 'barefoot-engine-listings__skeleton-card';
+    card.innerHTML = `
+      <div class="barefoot-engine-listings__skeleton-media"></div>
+      <div class="barefoot-engine-listings__skeleton-body">
+        <div class="barefoot-engine-listings__skeleton-line barefoot-engine-listings__skeleton-line--title"></div>
+        <div class="barefoot-engine-listings__skeleton-line"></div>
+        <div class="barefoot-engine-listings__skeleton-line barefoot-engine-listings__skeleton-line--short"></div>
+        <div class="barefoot-engine-listings__skeleton-line barefoot-engine-listings__skeleton-line--price"></div>
+      </div>
+    `;
+    skeletonGrid.appendChild(card);
+  }
+
+  gridNode.parentElement.insertBefore(skeletonGrid, gridNode);
+
+  return skeletonGrid;
+}
+
+function applySearchPayloadToWidgetState(widget, payload) {
+  if (!widget || widget.isDestroyed || !isPlainObject(payload)) {
+    return;
+  }
+
+  widget.state.location = typeof payload.location === 'string' ? payload.location : '';
+  widget.state.checkIn = isValidDateString(payload.checkIn) ? payload.checkIn : '';
+  widget.state.checkOut = isValidDateString(payload.checkOut) ? payload.checkOut : '';
+
+  if (typeof widget.buildFieldState === 'function') {
+    widget.state.customFields = widget.buildFieldState(
+      widget.options?.fields || [],
+      isPlainObject(payload.customFields) ? payload.customFields : {},
+    );
+  } else {
+    widget.state.customFields = isPlainObject(payload.customFields) ? payload.customFields : {};
+  }
+
+  if (typeof widget.buildFilterState === 'function') {
+    widget.state.filters = widget.buildFilterState(
+      widget.options?.filters || [],
+      isPlainObject(payload.filters) ? payload.filters : {},
+    );
+  } else {
+    widget.state.filters = isPlainObject(payload.filters) ? payload.filters : {};
+  }
+
+  if (typeof widget.render === 'function') {
+    widget.render();
+  }
+}
+
+function ensureClearSearchButton(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return null;
+  }
+
+  const toolbarRight = mountNode.querySelector('.lm-toolbar .lm-toolbar-right');
+  if (!(toolbarRight instanceof HTMLElement)) {
+    return null;
+  }
+
+  const existing = toolbarRight.querySelector('.barefoot-engine-listings__clear-search');
+  if (existing instanceof HTMLButtonElement) {
+    return existing;
+  }
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'barefoot-engine-listings__clear-search';
+  button.innerHTML = `
+    <span class="barefoot-engine-listings__clear-search-icon" aria-hidden="true">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8" cy="8" r="6.25"></circle>
+        <path d="M5.5 5.5L10.5 10.5"></path>
+        <path d="M10.5 5.5L5.5 10.5"></path>
+      </svg>
+    </span>
+    <span class="barefoot-engine-listings__clear-search-label">Clear</span>
+  `;
+  button.hidden = true;
+  button.addEventListener('click', () => {
+    clearEmbeddedSearchInputs(mountNode);
+  });
+
+  const sortWrapper = toolbarRight.querySelector('.lm-sort-wrapper');
+  if (sortWrapper instanceof HTMLElement) {
+    toolbarRight.insertBefore(button, sortWrapper);
+  } else {
+    toolbarRight.prepend(button);
+  }
+
+  return button;
+}
+
+function updateClearSearchButton(mountNode) {
+  const button = ensureClearSearchButton(mountNode);
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  button.hidden = !(mountNode.beEmbeddedSearchWidget && mountNode.beHasActiveSearch);
+}
+
+function clearEmbeddedSearchInputs(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const widget = mountNode.beEmbeddedSearchWidget;
+  if (!widget || widget.isDestroyed) {
+    return;
+  }
+
+  if (typeof widget.closeChoicePopover === 'function') {
+    widget.closeChoicePopover();
+  }
+
+  if (typeof widget.closeFilterPanel === 'function') {
+    widget.closeFilterPanel();
+  }
+
+  widget.state.location = '';
+  widget.state.checkIn = '';
+  widget.state.checkOut = '';
+
+  if (typeof widget.buildFieldState === 'function') {
+    widget.state.customFields = widget.buildFieldState(widget.options.fields || [], {});
+  } else {
+    widget.state.customFields = {};
+  }
+
+  if (typeof widget.buildFilterState === 'function') {
+    widget.state.filters = widget.buildFilterState(widget.options.filters || [], {});
+  } else {
+    widget.state.filters = {};
+  }
+
+  if (typeof widget.render === 'function') {
+    widget.render();
+  }
+
+  mountNode.beHasActiveSearch = false;
+  updateClearSearchButton(mountNode);
+}
+
+function updateListingsCount(mountNode, count) {
+  const metaNode = ensureListingsMeta(mountNode);
+  if (!(metaNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const countNode = metaNode.querySelector('.barefoot-engine-listings__count');
+  if (!(countNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const total = Number.isFinite(Number(count)) ? Number(count) : 0;
+  countNode.textContent = `${total} ${total === 1 ? 'Property' : 'Properties'}`;
+}
+
+function setListingsSearching(mountNode, isSearching) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const clearButton = mountNode.querySelector('.barefoot-engine-listings__clear-search');
+  if (clearButton instanceof HTMLButtonElement) {
+    clearButton.disabled = isSearching;
+  }
+
+  mountNode.classList.toggle('be-listings-searching', isSearching);
+
+  if (isSearching) {
+    ensureListingsSkeleton(mountNode);
+  }
+
+  const metaNode = ensureListingsMeta(mountNode);
+  if (!(metaNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const searchingNode = metaNode.querySelector('.barefoot-engine-listings__searching');
+  if (!(searchingNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const countNode = metaNode.querySelector('.barefoot-engine-listings__count');
+  if (countNode instanceof HTMLElement) {
+    countNode.hidden = isSearching;
+  }
+
+  searchingNode.hidden = !isSearching;
+}
+
+function alignToolbarControls(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const toolbarLeft = mountNode.querySelector('.lm-toolbar .lm-toolbar-left');
+  const toolbarRight = mountNode.querySelector('.lm-toolbar .lm-toolbar-right');
+  const sortWrapper = mountNode.querySelector('.lm-toolbar .lm-sort-wrapper');
+  const clearButton = mountNode.querySelector('.lm-toolbar .barefoot-engine-listings__clear-search');
+
+  if (!(toolbarLeft instanceof HTMLElement) || !(toolbarRight instanceof HTMLElement) || !(sortWrapper instanceof HTMLElement)) {
+    return;
+  }
+
+  if (clearButton instanceof HTMLButtonElement && clearButton.parentElement !== toolbarRight) {
+    toolbarRight.prepend(clearButton);
+  }
+
+  if (sortWrapper.parentElement !== toolbarRight) {
+    const currentClearButton = toolbarRight.querySelector('.barefoot-engine-listings__clear-search');
+    if (currentClearButton instanceof HTMLElement) {
+      toolbarRight.insertBefore(sortWrapper, currentClearButton.nextSibling);
+    } else {
+      toolbarRight.prepend(sortWrapper);
+    }
+  }
+
+  const metaNode = toolbarLeft.querySelector('.barefoot-engine-listings__meta');
+  if (metaNode instanceof HTMLElement) {
+    toolbarLeft.prepend(metaNode);
+  }
 }
 
 if (document.readyState === 'loading') {

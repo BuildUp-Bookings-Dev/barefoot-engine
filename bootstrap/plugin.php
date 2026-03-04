@@ -5,12 +5,14 @@ namespace BarefootEngine\Core;
 use BarefootEngine\Admin\Admin;
 use BarefootEngine\Integrations\Github_Updater;
 use BarefootEngine\Properties\Property_Admin_Actions;
+use BarefootEngine\Properties\Property_Availability_Service;
 use BarefootEngine\Properties\Property_Listings_Provider;
 use BarefootEngine\Properties\Property_Metaboxes;
 use BarefootEngine\Properties\Property_Post_Type;
 use BarefootEngine\Properties\Property_Taxonomies;
 use BarefootEngine\REST\Api_Integration_Controller;
 use BarefootEngine\REST\General_Settings_Controller;
+use BarefootEngine\REST\Property_Availability_Controller;
 use BarefootEngine\REST\Properties_Controller;
 use BarefootEngine\REST\Updates_Controller;
 use BarefootEngine\Services\Api_Integration_Settings;
@@ -34,6 +36,7 @@ class Plugin
     private ?Barefoot_Api_Client $api_client = null;
     private ?Property_Taxonomies $property_taxonomies = null;
     private ?Property_Sync_Service $property_sync_service = null;
+    private ?Property_Availability_Service $property_availability_service = null;
 
     public function __construct()
     {
@@ -58,7 +61,7 @@ class Plugin
         $public = new Frontend();
         $listings_preset_registry = new Listings_Preset_Registry();
         $search_preset_registry = new Search_Widget_Preset_Registry();
-        $property_listings_provider = new Property_Listings_Provider();
+        $property_listings_provider = new Property_Listings_Provider($this->get_property_availability_service());
         $listings_shortcode = new Listings_Shortcode(
             $listings_preset_registry,
             $property_listings_provider,
@@ -83,11 +86,13 @@ class Plugin
         $updates_service = new Updates_Service();
         $updates_controller = new Updates_Controller($updates_service);
         $properties_controller = new Properties_Controller($this->get_property_sync_service());
+        $availability_controller = new Property_Availability_Controller($this->get_property_availability_service());
 
         $this->loader->add_action('rest_api_init', $controller, 'register_routes', 10, 0);
         $this->loader->add_action('rest_api_init', $general_controller, 'register_routes', 10, 0);
         $this->loader->add_action('rest_api_init', $updates_controller, 'register_routes', 10, 0);
         $this->loader->add_action('rest_api_init', $properties_controller, 'register_routes', 10, 0);
+        $this->loader->add_action('rest_api_init', $availability_controller, 'register_routes', 10, 0);
     }
 
     private function define_property_hooks(): void
@@ -155,5 +160,17 @@ class Plugin
         }
 
         return $this->property_sync_service;
+    }
+
+    private function get_property_availability_service(): Property_Availability_Service
+    {
+        if (!$this->property_availability_service instanceof Property_Availability_Service) {
+            $this->property_availability_service = new Property_Availability_Service(
+                $this->get_api_client(),
+                $this->get_api_settings()
+            );
+        }
+
+        return $this->property_availability_service;
     }
 }

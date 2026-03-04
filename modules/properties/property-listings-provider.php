@@ -28,6 +28,12 @@ class Property_Listings_Provider
 
     private ?string $cached_target_date = null;
     private ?bool $cached_has_selected_check_in = null;
+    private Property_Availability_Service $availability_service;
+
+    public function __construct(?Property_Availability_Service $availability_service = null)
+    {
+        $this->availability_service = $availability_service ?? new Property_Availability_Service();
+    }
 
     /**
      * @return array<int, array<string, mixed>>
@@ -40,6 +46,8 @@ class Property_Listings_Provider
 
         $target_date = $this->resolve_target_date();
         $has_selected_check_in = $this->has_selected_check_in();
+        $check_in = $this->resolve_check_in();
+        $check_out = $this->resolve_check_out();
 
         $posts = get_posts(
             [
@@ -63,6 +71,26 @@ class Property_Listings_Provider
             $listing = $this->build_listing($post, $target_date, $has_selected_check_in);
             if ($listing !== null) {
                 $listings[] = $listing;
+            }
+        }
+
+        if ($this->availability_service->has_valid_date_range($check_in, $check_out)) {
+            $cached_available_property_ids = $this->availability_service->get_cached_available_property_ids($check_in, $check_out);
+
+            if (is_array($cached_available_property_ids)) {
+                $available_lookup = array_fill_keys($cached_available_property_ids, true);
+                $listings = array_values(
+                    array_filter(
+                        $listings,
+                        static function (array $listing) use ($available_lookup): bool {
+                            $property_id = isset($listing['propertyId']) && is_scalar($listing['propertyId'])
+                                ? trim((string) $listing['propertyId'])
+                                : '';
+
+                            return $property_id !== '' && isset($available_lookup[$property_id]);
+                        }
+                    )
+                );
             }
         }
 
@@ -101,6 +129,7 @@ class Property_Listings_Provider
 
         $listing = [
             'id' => $this->resolve_listing_id($post, $property_id, $keyboard_id),
+            'propertyId' => $property_id,
             'title' => $title,
             'images' => $this->resolve_images($post, $fields),
             'searchData' => $this->build_search_data($post, $fields, $title, $guest_count, $bedrooms, $property_type),
@@ -583,6 +612,24 @@ class Property_Listings_Provider
         $this->cached_has_selected_check_in = $this->is_valid_ymd_date($candidate);
 
         return $this->cached_has_selected_check_in;
+    }
+
+    private function resolve_check_in(): string
+    {
+        $candidate = isset($_GET['check_in']) && is_scalar($_GET['check_in'])
+            ? trim(wp_unslash((string) $_GET['check_in']))
+            : '';
+
+        return $this->is_valid_ymd_date($candidate) ? $candidate : '';
+    }
+
+    private function resolve_check_out(): string
+    {
+        $candidate = isset($_GET['check_out']) && is_scalar($_GET['check_out'])
+            ? trim(wp_unslash((string) $_GET['check_out']))
+            : '';
+
+        return $this->is_valid_ymd_date($candidate) ? $candidate : '';
     }
 
     private function is_valid_ymd_date(string $value): bool

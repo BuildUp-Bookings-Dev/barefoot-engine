@@ -168,6 +168,62 @@ class Barefoot_Api_Client
 
     /**
      * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
+    public function fetch_property_availability_by_date_xml(
+        array $settings,
+        string $date1,
+        string $date2,
+        int $weekly = 0
+    ): string|WP_Error {
+        $normalized_date1 = trim($date1);
+        $normalized_date2 = trim($date2);
+
+        if ($normalized_date1 === '' || $normalized_date2 === '') {
+            return new WP_Error(
+                'barefoot_engine_availability_missing_dates',
+                __('A valid date range is required to fetch property availability.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_string_method(
+            'GetPropertyAvailabilityByDateXML',
+            $settings,
+            [
+                'date1' => $normalized_date1,
+                'date2' => $normalized_date2,
+                'weekly' => (string) $weekly,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
+    public function fetch_last_avail_changed_properties_string(array $settings, string $last_access): string|WP_Error
+    {
+        $normalized_last_access = trim($last_access);
+        if ($normalized_last_access === '') {
+            return new WP_Error(
+                'barefoot_engine_availability_missing_last_access',
+                __('A valid last-access timestamp is required to probe availability changes.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_string_method(
+            'GetLastAvailChangedProperties',
+            $settings,
+            [
+                'LastAccess' => $normalized_last_access,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
      * @return array<string, string>|WP_Error
      */
     public function fetch_amenity_labels(array $settings): array|WP_Error

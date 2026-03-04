@@ -237,6 +237,127 @@ class Property_Parser
     }
 
     /**
+     * @return array{properties: array<int, array<string, mixed>>, property_ids: array<int, string>}|WP_Error
+     */
+    public function parse_property_availability_by_date(string $xml): array|WP_Error
+    {
+        $document = $this->load_document($xml);
+        if ($document === null) {
+            return new WP_Error(
+                'barefoot_engine_property_invalid_availability_xml',
+                __('Barefoot returned invalid availability XML.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $xpath = new \DOMXPath($document);
+        $row_nodes = $xpath->query('//*[local-name()="PropertyAvailability"]');
+        if ($row_nodes === false) {
+            $row_nodes = [];
+        }
+
+        $properties = [];
+        $property_ids = [];
+
+        foreach ($row_nodes as $row_node) {
+            if (!$row_node instanceof \DOMElement) {
+                continue;
+            }
+
+            $fields = [];
+
+            foreach ($row_node->childNodes as $field_node) {
+                if (!$field_node instanceof \DOMElement) {
+                    continue;
+                }
+
+                $fields[$field_node->localName] = trim($field_node->textContent);
+            }
+
+            if ($fields === []) {
+                continue;
+            }
+
+            $property_id = isset($fields['PropertyID']) ? trim((string) $fields['PropertyID']) : '';
+            $keyboard_id = isset($fields['keyboardid']) ? trim((string) $fields['keyboardid']) : '';
+            $title_candidates = [
+                isset($fields['name']) ? (string) $fields['name'] : '',
+                isset($fields['PropertyTitle']) ? (string) $fields['PropertyTitle'] : '',
+                $keyboard_id,
+                $property_id !== '' ? 'Property ' . $property_id : '',
+            ];
+            $title = '';
+
+            foreach ($title_candidates as $candidate) {
+                $candidate = trim($candidate);
+                if ($candidate !== '') {
+                    $title = $candidate;
+                    break;
+                }
+            }
+
+            $raw_xml = trim($document->saveXML($row_node));
+
+            $properties[] = [
+                'property_id' => $property_id,
+                'keyboard_id' => $keyboard_id,
+                'title' => $title === '' ? __('Property', 'barefoot-engine') : $title,
+                'fields' => $fields,
+                'raw_xml' => $raw_xml,
+            ];
+
+            if ($property_id !== '' && !in_array($property_id, $property_ids, true)) {
+                $property_ids[] = $property_id;
+            }
+        }
+
+        return [
+            'properties' => $properties,
+            'property_ids' => $property_ids,
+        ];
+    }
+
+    /**
+     * @return array{property_ids: array<int, string>}|WP_Error
+     */
+    public function parse_last_avail_changed_properties(string $xml): array|WP_Error
+    {
+        $document = $this->load_document($xml);
+        if ($document === null) {
+            return new WP_Error(
+                'barefoot_engine_property_invalid_availability_probe_xml',
+                __('Barefoot returned invalid availability change XML.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $xpath = new \DOMXPath($document);
+        $property_id_nodes = $xpath->query('//*[local-name()="PropertyID"]');
+        if ($property_id_nodes === false) {
+            $property_id_nodes = [];
+        }
+
+        $property_ids = [];
+
+        foreach ($property_id_nodes as $property_id_node) {
+            if (!$property_id_node instanceof \DOMElement) {
+                continue;
+            }
+
+            $property_id = trim($property_id_node->textContent);
+            if ($property_id === '' || in_array($property_id, $property_ids, true)) {
+                continue;
+            }
+
+            $property_ids[] = $property_id;
+        }
+
+        return [
+            'property_ids' => $property_ids,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>|WP_Error
      */
     public function parse_property_images(string $xml): array|WP_Error

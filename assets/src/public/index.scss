@@ -19,9 +19,132 @@
   width: 100%;
 }
 
+.barefoot-engine-listings__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.barefoot-engine-listings__count {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.barefoot-engine-listings__searching {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.barefoot-engine-listings__searching[hidden] {
+  display: none !important;
+}
+
+.barefoot-engine-listings__searching-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: currentColor;
+  animation: be-listings-search-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes be-listings-search-pulse {
+  from {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .barefoot-engine-listings__mount {
   width: 100%;
   min-height: 720px;
+}
+
+.barefoot-engine-listings .lm-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.barefoot-engine-listings .lm-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.barefoot-engine-listings__clear-search {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 21px;
+  cursor: pointer;
+  padding: 0 12px;
+  height: 39px;
+  box-sizing: border-box;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.barefoot-engine-listings__clear-search-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.barefoot-engine-listings__clear-search-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.barefoot-engine-listings__clear-search:hover:not(:disabled) {
+  background: #111827;
+  border-color: #111827;
+  color: #fff;
+}
+
+.barefoot-engine-listings__clear-search:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.barefoot-engine-listings__clear-search:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.barefoot-engine-listings__clear-search:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.barefoot-engine-listings__clear-search[hidden] {
+  display: none !important;
 }
 
 .barefoot-engine-listings .lm-heart-btn {
@@ -30,6 +153,78 @@
 
 .barefoot-engine-listings__mount.be-listings-initial-pricing .lm-card-price-value::before {
   content: 'Starts at ';
+}
+
+.barefoot-engine-listings__mount .barefoot-engine-listings__skeleton-grid {
+  display: none !important;
+}
+
+.barefoot-engine-listings__mount.be-listings-searching .barefoot-engine-listings__skeleton-grid {
+  display: grid !important;
+}
+
+.barefoot-engine-listings__mount.be-listings-searching .lm-listings-grid,
+.barefoot-engine-listings__mount.be-listings-searching .lm-pagination {
+  display: none !important;
+}
+
+.barefoot-engine-listings__skeleton-card {
+  border-radius: 0.9rem;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.barefoot-engine-listings__skeleton-media {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: linear-gradient(
+    110deg,
+    #f3f4f6 8%,
+    #e5e7eb 18%,
+    #f3f4f6 33%
+  );
+  background-size: 200% 100%;
+  animation: be-listings-skeleton-shimmer 1.2s linear infinite;
+}
+
+.barefoot-engine-listings__skeleton-body {
+  padding: 0.9rem 0.9rem 1rem;
+}
+
+.barefoot-engine-listings__skeleton-line {
+  height: 0.7rem;
+  border-radius: 0.45rem;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(
+    110deg,
+    #f3f4f6 8%,
+    #e5e7eb 18%,
+    #f3f4f6 33%
+  );
+  background-size: 200% 100%;
+  animation: be-listings-skeleton-shimmer 1.2s linear infinite;
+}
+
+.barefoot-engine-listings__skeleton-line--title {
+  height: 0.95rem;
+  width: 82%;
+}
+
+.barefoot-engine-listings__skeleton-line--short {
+  width: 58%;
+}
+
+.barefoot-engine-listings__skeleton-line--price {
+  width: 45%;
+  margin-top: 0.6rem;
+  margin-bottom: 0;
+}
+
+@keyframes be-listings-skeleton-shimmer {
+  to {
+    background-position-x: -200%;
+  }
 }
 
 .bp-calendar-tooltip {

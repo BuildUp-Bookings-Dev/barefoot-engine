@@ -49,6 +49,17 @@ class Frontend
 
         $this->enqueue_script_entry(self::PUBLIC_SCRIPT_HANDLE, 'public-script');
         $this->enqueue_style_entry(self::PUBLIC_STYLE_HANDLE, 'public-style');
+
+        if (wp_script_is(self::PUBLIC_SCRIPT_HANDLE, 'enqueued')) {
+            wp_localize_script(
+                self::PUBLIC_SCRIPT_HANDLE,
+                'BarefootEnginePublic',
+                [
+                    'restBase' => esc_url_raw(rest_url('barefoot-engine/v1/')),
+                    'availabilitySearchEndpoint' => 'availability/search',
+                ]
+            );
+        }
     }
 
     public function mark_module_scripts(string $tag, string $handle, string $src): string
