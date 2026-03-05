@@ -1402,9 +1402,11 @@ class Property_Sync_Service
 
     private function resolve_bathroom_count_value(array $fields): ?string
     {
-        $normalized = $this->normalize_non_negative_number_string($fields['a195'] ?? null);
-        if ($normalized !== null) {
-            return $normalized;
+        foreach ([$fields['a195'] ?? null, $this->resolve_amenity_value($fields, 'a195')] as $candidate) {
+            $normalized = $this->normalize_non_negative_number_string($candidate);
+            if ($normalized !== null) {
+                return $normalized;
+            }
         }
 
         foreach (['a259', 'PropertyTitle'] as $key) {
@@ -1412,6 +1414,33 @@ class Property_Sync_Service
             if ($parsed !== null) {
                 return $parsed;
             }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     */
+    private function resolve_amenity_value(array $fields, string $amenity_key): ?string
+    {
+        if (!isset($fields['amenities']) || !is_array($fields['amenities'])) {
+            return null;
+        }
+
+        foreach ($fields['amenities'] as $amenity) {
+            if (!is_array($amenity)) {
+                continue;
+            }
+
+            $key = isset($amenity['key']) && is_scalar($amenity['key']) ? trim((string) $amenity['key']) : '';
+            if ($key === '' || strcasecmp($key, $amenity_key) !== 0) {
+                continue;
+            }
+
+            $value = isset($amenity['value']) && is_scalar($amenity['value']) ? trim((string) $amenity['value']) : '';
+
+            return $value !== '' ? $value : null;
         }
 
         return null;

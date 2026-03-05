@@ -284,12 +284,12 @@ function parseSearchPayloadFromUrl(search) {
     }
 
     if (rawKey === 'check_in') {
-      payload.checkIn = value;
+      payload.checkIn = normalizeDateInput(value);
       return;
     }
 
     if (rawKey === 'check_out') {
-      payload.checkOut = value;
+      payload.checkOut = normalizeDateInput(value);
       return;
     }
 
@@ -300,10 +300,66 @@ function parseSearchPayloadFromUrl(search) {
 
     if (rawKey.startsWith('filter_')) {
       appendPayloadValue(payload.filters, rawKey.slice(7), value);
+      return;
+    }
+
+    if (rawKey === 'guests') {
+      appendPayloadValue(payload.customFields, 'guests', value);
+      appendPayloadValue(payload.filters, 'guests', value);
+      return;
+    }
+
+    if (rawKey === 'bedrooms' || rawKey === 'bathrooms') {
+      appendPayloadValue(payload.customFields, rawKey, value);
+      appendPayloadValue(payload.filters, rawKey, value);
+      return;
+    }
+
+    if (rawKey === 'property_type' || rawKey === 'view') {
+      appendPayloadValue(payload.filters, rawKey, value);
     }
   });
 
   return payload;
+}
+
+function normalizeDateInput(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  if (isValidDateString(raw)) {
+    return raw;
+  }
+
+  const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!slashMatch) {
+    return '';
+  }
+
+  const month = Number(slashMatch[1]);
+  const day = Number(slashMatch[2]);
+  const year = Number(slashMatch[3]);
+
+  if (!Number.isInteger(month) || !Number.isInteger(day) || !Number.isInteger(year)) {
+    return '';
+  }
+
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year
+    || candidate.getUTCMonth() !== month - 1
+    || candidate.getUTCDate() !== day
+  ) {
+    return '';
+  }
+
+  const yyyy = String(year).padStart(4, '0');
+  const mm = String(month).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function appendPayloadValue(target, rawKey, value) {
@@ -376,7 +432,7 @@ function matchValue(key, type, listingValue, submittedValue) {
   }
 
   if (type === 'select' || type === 'radio') {
-    if (isGuestKey(key) && hasNumericValue(listingValue) && hasNumericValue(submittedValue)) {
+    if (isAtLeastNumericKey(key) && hasNumericValue(listingValue) && hasNumericValue(submittedValue)) {
       return matchesNumericAtLeast(listingValue, submittedValue);
     }
 
@@ -387,7 +443,7 @@ function matchValue(key, type, listingValue, submittedValue) {
     return matchesAllChoices(listingValue, submittedValue);
   }
 
-  if (isGuestKey(key) && hasNumericValue(listingValue) && hasNumericValue(submittedValue)) {
+  if (isAtLeastNumericKey(key) && hasNumericValue(listingValue) && hasNumericValue(submittedValue)) {
     return matchesNumericAtLeast(listingValue, submittedValue);
   }
 
@@ -506,6 +562,14 @@ function hasNumericValue(value) {
 
 function isGuestKey(key) {
   return typeof key === 'string' && /(guest|occupancy)/i.test(key);
+}
+
+function isAtLeastNumericKey(key) {
+  if (isGuestKey(key)) {
+    return true;
+  }
+
+  return typeof key === 'string' && /(bedroom|bedrooms|bathroom|bathrooms|beds|baths)/i.test(key);
 }
 
 function isPlainObject(value) {

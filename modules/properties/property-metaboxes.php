@@ -293,10 +293,43 @@ class Property_Metaboxes
         $display_fields[self::BATHROOM_COUNT_FIELD] = $this->resolve_display_count(
             $post_id,
             Property_Sync_Service::BATHROOM_COUNT_META_KEY,
-            [$fields['a195'] ?? null, $this->parse_count_from_text($fields['a259'] ?? null, 'bath'), $this->parse_count_from_text($fields['PropertyTitle'] ?? null, 'bath')]
+            [
+                $fields['a195'] ?? null,
+                $this->resolve_amenity_value($fields, 'a195'),
+                get_post_meta($post_id, '_be_property_api_a195', true),
+                $this->parse_count_from_text($fields['a259'] ?? null, 'bath'),
+                $this->parse_count_from_text($fields['PropertyTitle'] ?? null, 'bath'),
+            ]
         );
 
         return $display_fields;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     */
+    private function resolve_amenity_value(array $fields, string $amenity_key): ?string
+    {
+        if (!isset($fields['amenities']) || !is_array($fields['amenities'])) {
+            return null;
+        }
+
+        foreach ($fields['amenities'] as $amenity) {
+            if (!is_array($amenity)) {
+                continue;
+            }
+
+            $key = isset($amenity['key']) && is_scalar($amenity['key']) ? trim((string) $amenity['key']) : '';
+            if ($key === '' || strcasecmp($key, $amenity_key) !== 0) {
+                continue;
+            }
+
+            $value = isset($amenity['value']) && is_scalar($amenity['value']) ? trim((string) $amenity['value']) : '';
+
+            return $value !== '' ? $value : null;
+        }
+
+        return null;
     }
 
     /**

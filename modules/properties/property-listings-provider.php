@@ -132,7 +132,7 @@ class Property_Listings_Provider
             'propertyId' => $property_id,
             'title' => $title,
             'images' => $this->resolve_images($post, $fields),
-            'searchData' => $this->build_search_data($post, $fields, $title, $guest_count, $bedrooms, $property_type),
+            'searchData' => $this->build_search_data($post, $fields, $title, $guest_count, $bedrooms, $bathrooms, $property_type),
             'permalink' => get_permalink($post),
         ];
 
@@ -274,6 +274,7 @@ class Property_Listings_Provider
         string $title,
         ?int $guest_count,
         ?int $bedrooms,
+        ?string $bathrooms,
         string $property_type
     ): array
     {
@@ -298,10 +299,17 @@ class Property_Listings_Provider
 
         if ($guest_count !== null) {
             $field_values['guests'] = (string) $guest_count;
+            $filter_values['guests'] = (string) $guest_count;
         }
 
         if ($bedrooms !== null) {
+            $field_values['bedrooms'] = (string) $bedrooms;
             $filter_values['bedrooms'] = $bedrooms;
+        }
+
+        if ($bathrooms !== null && $bathrooms !== '') {
+            $field_values['bathrooms'] = $bathrooms;
+            $filter_values['bathrooms'] = $bathrooms;
         }
 
         if ($property_type !== '') {
@@ -584,11 +592,9 @@ class Property_Listings_Provider
             return $this->cached_target_date;
         }
 
-        $candidate = isset($_GET['check_in']) && is_scalar($_GET['check_in'])
-            ? trim(wp_unslash((string) $_GET['check_in']))
-            : '';
+        $candidate = $this->resolve_request_date_parameter('check_in');
 
-        if ($this->is_valid_ymd_date($candidate)) {
+        if ($candidate !== '') {
             $this->cached_target_date = $candidate;
 
             return $this->cached_target_date;
@@ -605,31 +611,56 @@ class Property_Listings_Provider
             return $this->cached_has_selected_check_in;
         }
 
-        $candidate = isset($_GET['check_in']) && is_scalar($_GET['check_in'])
-            ? trim(wp_unslash((string) $_GET['check_in']))
-            : '';
+        $candidate = $this->resolve_request_date_parameter('check_in');
 
-        $this->cached_has_selected_check_in = $this->is_valid_ymd_date($candidate);
+        $this->cached_has_selected_check_in = $candidate !== '';
 
         return $this->cached_has_selected_check_in;
     }
 
     private function resolve_check_in(): string
     {
-        $candidate = isset($_GET['check_in']) && is_scalar($_GET['check_in'])
-            ? trim(wp_unslash((string) $_GET['check_in']))
-            : '';
-
-        return $this->is_valid_ymd_date($candidate) ? $candidate : '';
+        return $this->resolve_request_date_parameter('check_in');
     }
 
     private function resolve_check_out(): string
     {
-        $candidate = isset($_GET['check_out']) && is_scalar($_GET['check_out'])
-            ? trim(wp_unslash((string) $_GET['check_out']))
+        return $this->resolve_request_date_parameter('check_out');
+    }
+
+    private function resolve_request_date_parameter(string $key): string
+    {
+        $candidate = isset($_GET[$key]) && is_scalar($_GET[$key])
+            ? trim(wp_unslash((string) $_GET[$key]))
             : '';
 
-        return $this->is_valid_ymd_date($candidate) ? $candidate : '';
+        return $this->normalize_input_date($candidate);
+    }
+
+    private function normalize_input_date(string $value): string
+    {
+        if ($this->is_valid_ymd_date($value)) {
+            return $value;
+        }
+
+        if ($value === '' || preg_match('/^\d{1,2}\/\d{1,2}\/\d{4}$/', $value) !== 1) {
+            return '';
+        }
+
+        $parts = explode('/', $value);
+        if (count($parts) !== 3) {
+            return '';
+        }
+
+        $month = (int) $parts[0];
+        $day = (int) $parts[1];
+        $year = (int) $parts[2];
+
+        if (!checkdate($month, $day, $year)) {
+            return '';
+        }
+
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
     }
 
     private function is_valid_ymd_date(string $value): bool
@@ -742,9 +773,17 @@ class Property_Listings_Provider
             return $stored_bathrooms;
         }
 
-        $bathrooms = $this->normalize_non_negative_number($fields['a195'] ?? null);
-        if ($bathrooms !== null) {
-            return $bathrooms;
+        foreach (
+            [
+                $fields['a195'] ?? null,
+                $this->resolve_amenity_value($fields, 'a195'),
+                get_post_meta($post->ID, '_be_property_api_a195', true),
+            ] as $candidate
+        ) {
+            $bathrooms = $this->normalize_non_negative_number($candidate);
+            if ($bathrooms !== null) {
+                return $bathrooms;
+            }
         }
 
         foreach (['a259', 'PropertyTitle'] as $key) {
@@ -752,6 +791,33 @@ class Property_Listings_Provider
             if ($parsed !== null) {
                 return $parsed;
             }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     */
+    private function resolve_amenity_value(array $fields, string $amenity_key): ?string
+    {
+        if (!isset($fields['amenities']) || !is_array($fields['amenities'])) {
+            return null;
+        }
+
+        foreach ($fields['amenities'] as $amenity) {
+            if (!is_array($amenity)) {
+                continue;
+            }
+
+            $key = isset($amenity['key']) && is_scalar($amenity['key']) ? trim((string) $amenity['key']) : '';
+            if ($key === '' || strcasecmp($key, $amenity_key) !== 0) {
+                continue;
+            }
+
+            $value = isset($amenity['value']) && is_scalar($amenity['value']) ? trim((string) $amenity['value']) : '';
+
+            return $value !== '' ? $value : null;
         }
 
         return null;
