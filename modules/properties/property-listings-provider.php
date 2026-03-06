@@ -119,7 +119,7 @@ class Property_Listings_Provider
         $guest_count = $this->resolve_guest_count($post, $fields);
         $bedrooms = $this->resolve_bedrooms($post, $fields);
         $bathrooms = $this->resolve_bathrooms($post, $fields);
-        $property_type = $this->clean_string($fields['a259'] ?? '');
+        $property_type = $this->clean_string($fields['PropertyType'] ?? '');
         $coordinates = $this->resolve_coordinates($fields);
         $pricing_data = $this->resolve_pricing_data($post, $target_date, $has_selected_check_in);
 
@@ -299,26 +299,28 @@ class Property_Listings_Provider
 
         if ($guest_count !== null) {
             $field_values['guests'] = (string) $guest_count;
-            $filter_values['guests'] = (string) $guest_count;
         }
 
         if ($bedrooms !== null) {
-            $field_values['bedrooms'] = (string) $bedrooms;
             $filter_values['bedrooms'] = $bedrooms;
         }
 
         if ($bathrooms !== null && $bathrooms !== '') {
-            $field_values['bathrooms'] = $bathrooms;
             $filter_values['bathrooms'] = $bathrooms;
         }
 
-        if ($property_type !== '') {
-            $filter_values['property_type'] = $property_type;
+        $amenities = $this->resolve_amenity_labels($fields);
+        if ($amenities !== []) {
+            $filter_values['amenities'] = $amenities;
         }
 
-        $view = $this->clean_string($fields['a261'] ?? '');
-        if ($view !== '') {
-            $filter_values['view'] = $view;
+        if ($property_type !== '') {
+            $filter_values['type'] = $property_type;
+        }
+
+        $rating = $this->clean_string($fields['a267'] ?? '');
+        if ($rating !== '') {
+            $filter_values['rating'] = $rating;
         }
 
         return [
@@ -821,6 +823,37 @@ class Property_Listings_Provider
         }
 
         return null;
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @return array<int, string>
+     */
+    private function resolve_amenity_labels(array $fields): array
+    {
+        if (!isset($fields['amenities']) || !is_array($fields['amenities'])) {
+            return [];
+        }
+
+        $labels = [];
+
+        foreach ($fields['amenities'] as $amenity) {
+            if (!is_array($amenity)) {
+                continue;
+            }
+
+            $label = isset($amenity['label']) && is_scalar($amenity['label']) ? trim((string) $amenity['label']) : '';
+            if ($label === '') {
+                continue;
+            }
+
+            $labels[] = $label;
+        }
+
+        $labels = array_values(array_unique($labels));
+        sort($labels, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $labels;
     }
 
     /**

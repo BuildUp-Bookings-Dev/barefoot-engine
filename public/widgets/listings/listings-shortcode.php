@@ -2,6 +2,8 @@
 
 namespace BarefootEngine\Widgets\Listings;
 
+use BarefootEngine\Properties\Property_Post_Type;
+use BarefootEngine\Properties\Property_Taxonomies;
 use BarefootEngine\Properties\Property_Listings_Provider;
 use BarefootEngine\Widgets\Search\Search_Widget_Preset_Registry;
 
@@ -81,6 +83,7 @@ class Listings_Shortcode
                 $this->search_widget_preset_registry->get($search_widget_id)
             );
         }
+        $config = $this->apply_runtime_search_widget_options($config);
 
         $filtered_config = apply_filters('barefoot_engine_listings_shortcode_config', $config, $attributes);
         if (is_array($filtered_config)) {
@@ -342,5 +345,202 @@ class Listings_Shortcode
         $config['targetUrl'] = $target_url;
 
         return $config;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private function apply_runtime_search_widget_options(array $config): array
+    {
+        if (!isset($config['searchWidget']) || !is_array($config['searchWidget'])) {
+            return $config;
+        }
+
+        $search_widget = $config['searchWidget'];
+        $filters = isset($search_widget['filters']) && is_array($search_widget['filters'])
+            ? array_values(array_filter($search_widget['filters'], static fn($item): bool => is_array($item)))
+            : [];
+
+        $amenity_options = $this->get_taxonomy_term_options(Property_Taxonomies::AMENITY_TAXONOMY);
+        $type_options = $this->get_taxonomy_term_options(Property_Taxonomies::TYPE_TAXONOMY);
+        $rating_options = $this->get_rating_options();
+
+        $dynamic_filter_map = [
+            'amenities' => [
+                'label' => __('Amenities', 'barefoot-engine'),
+                'type' => 'checkbox',
+                'options' => $amenity_options,
+            ],
+            'type' => [
+                'label' => __('Type', 'barefoot-engine'),
+                'type' => 'select',
+                'options' => $type_options,
+            ],
+            'rating' => [
+                'label' => __('Rating', 'barefoot-engine'),
+                'type' => 'select',
+                'options' => $rating_options,
+            ],
+        ];
+
+        $next_filters = [];
+        $seen_keys = [];
+
+        foreach ($filters as $filter) {
+            $key = isset($filter['key']) && is_scalar($filter['key']) ? trim((string) $filter['key']) : '';
+            if ($key === '') {
+                continue;
+            }
+
+            if (isset($dynamic_filter_map[$key])) {
+                $dynamic = $dynamic_filter_map[$key];
+                $options = $dynamic['options'];
+                if (!is_array($options) || $options === []) {
+                    $seen_keys[$key] = true;
+                    continue;
+                }
+
+                $filter['label'] = $dynamic['label'];
+                $filter['type'] = $dynamic['type'];
+                $filter['options'] = $options;
+                $filter['required'] = false;
+            }
+
+            $next_filters[] = $filter;
+            $seen_keys[$key] = true;
+        }
+
+        foreach ($dynamic_filter_map as $key => $dynamic) {
+            if (isset($seen_keys[$key])) {
+                continue;
+            }
+
+            $options = $dynamic['options'];
+            if (!is_array($options) || $options === []) {
+                continue;
+            }
+
+            $next_filters[] = [
+                'label' => $dynamic['label'],
+                'type' => $dynamic['type'],
+                'options' => $options,
+                'required' => false,
+                'key' => $key,
+            ];
+        }
+
+        $search_widget['filters'] = $this->prioritize_filter_order($next_filters);
+        $config['searchWidget'] = $search_widget;
+
+        return $config;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $filters
+     * @return array<int, array<string, mixed>>
+     */
+    private function prioritize_filter_order(array $filters): array
+    {
+        $priority_keys = ['rating', 'type'];
+        $prioritized = [];
+        $used_indexes = [];
+
+        foreach ($priority_keys as $priority_key) {
+            foreach ($filters as $index => $filter) {
+                $key = isset($filter['key']) && is_scalar($filter['key']) ? trim((string) $filter['key']) : '';
+                if ($key === '' || $key !== $priority_key || isset($used_indexes[$index])) {
+                    continue;
+                }
+
+                $prioritized[] = $filter;
+                $used_indexes[$index] = true;
+            }
+        }
+
+        foreach ($filters as $index => $filter) {
+            if (isset($used_indexes[$index])) {
+                continue;
+            }
+
+            $prioritized[] = $filter;
+        }
+
+        return $prioritized;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function get_taxonomy_term_options(string $taxonomy): array
+    {
+        if (!taxonomy_exists($taxonomy)) {
+            return [];
+        }
+
+        $terms = get_terms(
+            [
+                'taxonomy' => $taxonomy,
+                'hide_empty' => true,
+                'fields' => 'names',
+                'orderby' => 'name',
+                'order' => 'ASC',
+            ]
+        );
+
+        if (!is_array($terms) || is_wp_error($terms)) {
+            return [];
+        }
+
+        $options = [];
+        foreach ($terms as $term_name) {
+            if (!is_scalar($term_name)) {
+                continue;
+            }
+
+            $name = trim((string) $term_name);
+            if ($name !== '') {
+                $options[] = $name;
+            }
+        }
+
+        return array_values(array_unique($options));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function get_rating_options(): array
+    {
+        $post_ids = get_posts(
+            [
+                'post_type' => Property_Post_Type::POST_TYPE,
+                'post_status' => 'publish',
+                'meta_key' => '_be_property_import_status',
+                'meta_value' => 'active',
+                'numberposts' => -1,
+                'fields' => 'ids',
+            ]
+        );
+
+        if (!is_array($post_ids) || $post_ids === []) {
+            return [];
+        }
+
+        $ratings = [];
+
+        foreach ($post_ids as $post_id) {
+            $rating = trim((string) get_post_meta((int) $post_id, '_be_property_api_a267', true));
+            if ($rating === '') {
+                continue;
+            }
+
+            $ratings[] = sanitize_text_field($rating);
+        }
+
+        $ratings = array_values(array_unique(array_filter($ratings, static fn(string $value): bool => $value !== '')));
+        sort($ratings, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $ratings;
     }
 }

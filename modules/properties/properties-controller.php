@@ -2,6 +2,7 @@
 
 namespace BarefootEngine\REST;
 
+use BarefootEngine\Properties\Property_Delta_Refresh_Service;
 use BarefootEngine\Services\Property_Sync_Service;
 use WP_Error;
 use WP_REST_Request;
@@ -18,10 +19,15 @@ class Properties_Controller
     private const REST_BASE = 'properties';
 
     private Property_Sync_Service $sync_service;
+    private Property_Delta_Refresh_Service $delta_refresh_service;
 
-    public function __construct(?Property_Sync_Service $sync_service = null)
+    public function __construct(
+        ?Property_Sync_Service $sync_service = null,
+        ?Property_Delta_Refresh_Service $delta_refresh_service = null
+    )
     {
         $this->sync_service = $sync_service ?? new Property_Sync_Service();
+        $this->delta_refresh_service = $delta_refresh_service ?? new Property_Delta_Refresh_Service();
     }
 
     public function register_routes(): void
@@ -57,6 +63,42 @@ class Properties_Controller
                 [
                     'methods' => WP_REST_Server::CREATABLE,
                     'callback' => [$this, 'partial_sync_properties'],
+                    'permission_callback' => [$this, 'permissions_check'],
+                ],
+            ]
+        );
+
+        register_rest_route(
+            self::NAMESPACE,
+            '/' . self::REST_BASE . '/debug/last-updated',
+            [
+                [
+                    'methods' => WP_REST_Server::CREATABLE,
+                    'callback' => [$this, 'debug_last_updated'],
+                    'permission_callback' => [$this, 'permissions_check'],
+                ],
+            ]
+        );
+
+        register_rest_route(
+            self::NAMESPACE,
+            '/' . self::REST_BASE . '/debug/last-avail-changed',
+            [
+                [
+                    'methods' => WP_REST_Server::CREATABLE,
+                    'callback' => [$this, 'debug_last_availability_changed'],
+                    'permission_callback' => [$this, 'permissions_check'],
+                ],
+            ]
+        );
+
+        register_rest_route(
+            self::NAMESPACE,
+            '/' . self::REST_BASE . '/debug/delta-preview',
+            [
+                [
+                    'methods' => WP_REST_Server::CREATABLE,
+                    'callback' => [$this, 'debug_delta_preview'],
                     'permission_callback' => [$this, 'permissions_check'],
                 ],
             ]
@@ -142,12 +184,85 @@ class Properties_Controller
     }
 
     /**
+     * @return WP_REST_Response|WP_Error
+     */
+    public function debug_last_updated(WP_REST_Request $request)
+    {
+        $last_access = $this->read_optional_scalar_param($request, 'last_access');
+        $result = $this->delta_refresh_service->probe_property_changes($last_access !== '' ? $last_access : null);
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return rest_ensure_response(
+            [
+                'success' => true,
+                'data' => $result,
+            ]
+        );
+    }
+
+    /**
+     * @return WP_REST_Response|WP_Error
+     */
+    public function debug_last_availability_changed(WP_REST_Request $request)
+    {
+        $last_access = $this->read_optional_scalar_param($request, 'last_access');
+        $use_test_endpoint = rest_sanitize_boolean($request->get_param('use_test_endpoint'));
+        $result = $this->delta_refresh_service->probe_availability_changes($last_access !== '' ? $last_access : null, $use_test_endpoint);
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return rest_ensure_response(
+            [
+                'success' => true,
+                'data' => $result,
+            ]
+        );
+    }
+
+    /**
+     * @return WP_REST_Response|WP_Error
+     */
+    public function debug_delta_preview(WP_REST_Request $request)
+    {
+        $property_last_access = $this->read_optional_scalar_param($request, 'property_last_access');
+        $availability_last_access = $this->read_optional_scalar_param($request, 'availability_last_access');
+        $use_test_endpoint = rest_sanitize_boolean($request->get_param('use_test_endpoint'));
+
+        $result = $this->delta_refresh_service->preview_delta(
+            $property_last_access !== '' ? $property_last_access : null,
+            $availability_last_access !== '' ? $availability_last_access : null,
+            $use_test_endpoint
+        );
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        return rest_ensure_response(
+            [
+                'success' => true,
+                'data' => $result,
+            ]
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function build_settings_payload(): array
     {
         return [
             'sync_state' => $this->sync_service->get_sync_state(),
+            'delta_state' => $this->delta_refresh_service->get_state(),
         ];
+    }
+
+    private function read_optional_scalar_param(WP_REST_Request $request, string $key): string
+    {
+        $value = $request->get_param($key);
+
+        return is_scalar($value) ? trim((string) $value) : '';
     }
 }

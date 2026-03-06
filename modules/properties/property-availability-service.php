@@ -174,6 +174,43 @@ class Property_Availability_Service
     }
 
     /**
+     * @param array<int, mixed> $changed_property_ids
+     * @return array<string, mixed>
+     */
+    public function invalidate_cache_for_property_ids(array $changed_property_ids, ?int $timestamp = null): array
+    {
+        $normalized_ids = [];
+
+        foreach ($changed_property_ids as $property_id) {
+            if (!is_scalar($property_id)) {
+                continue;
+            }
+
+            $value = trim((string) $property_id);
+            if ($value === '' || in_array($value, $normalized_ids, true)) {
+                continue;
+            }
+
+            $normalized_ids[] = $value;
+        }
+
+        $state = $this->load_availability_state();
+        if ($normalized_ids !== []) {
+            $state['cache_version'] = max(1, (int) ($state['cache_version'] ?? 1)) + 1;
+        }
+
+        $now = $timestamp !== null ? (int) $timestamp : time();
+        $state['last_probe_at'] = $now;
+        $state['last_access'] = $this->format_last_access_time($now);
+        $state['last_changed_ids'] = $normalized_ids;
+        $state['last_status'] = 'success';
+        $state['last_error'] = '';
+        $this->save_availability_state($state);
+
+        return $state;
+    }
+
+    /**
      * @param array<string, array<string, string>> $settings
      */
     private function maybe_refresh_cache_version(array $settings): void

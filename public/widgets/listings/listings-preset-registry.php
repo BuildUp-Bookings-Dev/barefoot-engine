@@ -26,33 +26,66 @@ class Listings_Preset_Registry
         'pageSize' => 12,
         'searchWidget' => [
             'targetUrl' => '',
-            'showLocation' => false,
-            'showFilterButton' => false,
-            'locationLabel' => 'Location',
-            'locationPlaceholder' => 'Where are you going?',
+            'showLocation' => true,
+            'filterDisplayMode' => 'left-slide',
+            'showFilterButton' => true,
+            'locationLabel' => 'Keyword',
+            'locationPlaceholder' => 'Search keyword',
             'dateLabel' => 'Dates',
             'datePlaceholder' => 'Check in — Check out',
             'fields' => [
                 [
-                    'label' => 'Bedrooms',
+                    'label' => 'Guests',
                     'type' => 'select',
-                    'options' => ['1', '2', '3', '4+'],
+                    'options' => [
+                        '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+                        '11', '12', '13', '14', '15', '16', '17', '18', '19', '20',
+                        '21', '22', '23', '24', '25', '26', '27', '28', '29', '30',
+                        '32', '34', '36', '40+',
+                    ],
                     'position' => 'end',
                     'required' => false,
+                    'key' => 'guests',
+                    'icon' => 'fa-solid fa-users',
+                ],
+            ],
+            'filters' => [
+                [
+                    'label' => 'Rating',
+                    'type' => 'select',
+                    'options' => [],
+                    'required' => false,
+                    'key' => 'rating',
+                ],
+                [
+                    'label' => 'Type',
+                    'type' => 'select',
+                    'options' => [],
+                    'required' => false,
+                    'key' => 'type',
+                ],
+                [
+                    'label' => 'Bedrooms',
+                    'type' => 'select',
+                    'options' => ['1', '2', '3', '4', '5', '6', '7', '8+'],
+                    'required' => false,
                     'key' => 'bedrooms',
-                    'icon' => 'fa-solid fa-bed',
                 ],
                 [
                     'label' => 'Bathrooms',
                     'type' => 'select',
-                    'options' => ['1', '2', '3', '4+'],
-                    'position' => 'end',
+                    'options' => ['1', '2', '3', '4', '5', '6+'],
                     'required' => false,
                     'key' => 'bathrooms',
-                    'icon' => 'fa-solid fa-bath',
+                ],
+                [
+                    'label' => 'Amenities',
+                    'type' => 'checkbox',
+                    'options' => [],
+                    'required' => false,
+                    'key' => 'amenities',
                 ],
             ],
-            'filters' => [],
             'calendarOptions' => [
                 'monthsToShow' => 2,
                 'datepickerPlacement' => 'auto',
@@ -321,6 +354,20 @@ class Listings_Preset_Registry
     }
 
     /**
+     * @param mixed $value
+     */
+    private function normalize_filter_display_mode($value): string
+    {
+        if (!is_scalar($value)) {
+            return 'left-slide';
+        }
+
+        $mode = strtolower(trim((string) $value));
+
+        return in_array($mode, ['modal', 'left-slide'], true) ? $mode : 'left-slide';
+    }
+
+    /**
      * @param array<string, mixed> $config
      * @return array<string, mixed>
      */
@@ -335,6 +382,10 @@ class Listings_Preset_Registry
 
         if (array_key_exists('showLocation', $config)) {
             $normalized['showLocation'] = $this->normalize_boolean($config['showLocation'], true);
+        }
+
+        if (array_key_exists('filterDisplayMode', $config)) {
+            $normalized['filterDisplayMode'] = $this->normalize_filter_display_mode($config['filterDisplayMode']);
         }
 
         if (array_key_exists('showFilterButton', $config)) {

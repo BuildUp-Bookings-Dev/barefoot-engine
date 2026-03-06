@@ -16,6 +16,7 @@ class Search_Widget_Preset_Registry
     private const FALLBACK_PRESET = [
         'targetUrl' => '',
         'showLocation' => true,
+        'filterDisplayMode' => 'left-slide',
         'showFilterButton' => false,
         'locationLabel' => 'Location',
         'locationPlaceholder' => 'Where are you going?',
@@ -138,6 +139,10 @@ class Search_Widget_Preset_Registry
 
         if (array_key_exists('showLocation', $preset)) {
             $normalized['showLocation'] = $this->normalize_boolean($preset['showLocation'], true);
+        }
+
+        if (array_key_exists('filterDisplayMode', $preset)) {
+            $normalized['filterDisplayMode'] = $this->normalize_filter_display_mode($preset['filterDisplayMode']);
         }
 
         if (array_key_exists('showFilterButton', $preset)) {
@@ -279,6 +284,20 @@ class Search_Widget_Preset_Registry
         $days = is_numeric($value) ? (int) $value : 1;
 
         return max(1, $days);
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalize_filter_display_mode($value): string
+    {
+        if (!is_scalar($value)) {
+            return 'left-slide';
+        }
+
+        $mode = strtolower(trim((string) $value));
+
+        return in_array($mode, ['modal', 'left-slide'], true) ? $mode : 'left-slide';
     }
 
     private function sanitize_target_url(string $url): string

@@ -14,6 +14,73 @@
   overflow: visible;
 }
 
+.barefoot-engine-public .bp-search-widget__filter-panel {
+  z-index: 100100 !important;
+}
+
+.barefoot-engine-public .bp-search-widget__filter-dialog--left-slide {
+  padding-top: 2.5rem;
+}
+
+.barefoot-engine-public .bp-search-widget__popover,
+.barefoot-engine-public .bp-search-widget__popover--floating {
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  padding-right: 22px;
+  background-clip: padding-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.barefoot-engine-public .bp-search-widget__popover::-webkit-scrollbar,
+.barefoot-engine-public .bp-search-widget__popover--floating::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.barefoot-engine-public .barefoot-engine-choice-scrollbar {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  bottom: 12px;
+  width: 6px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  box-sizing: border-box;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.barefoot-engine-public .barefoot-engine-choice-scrollbar.is-hidden {
+  opacity: 0;
+}
+
+.barefoot-engine-public .barefoot-engine-choice-scrollbar__thumb {
+  width: 100%;
+  border-radius: 999px;
+  background: #9ca3af;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  transform: translateY(0);
+  transition: transform 0.08s linear, background 0.15s ease;
+}
+
+.barefoot-engine-public .barefoot-engine-choice-scrollbar__thumb:hover {
+  background: #8b94a3;
+}
+
+.barefoot-engine-public .bp-search-widget__choice-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
+}
+
 .barefoot-engine-listings {
   margin-block: 1.5rem;
   width: 100%;
@@ -151,6 +218,34 @@
   display: none !important;
 }
 
+.barefoot-engine-listings__map-searching {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.barefoot-engine-listings__map-searching[hidden] {
+  display: none !important;
+}
+
+.barefoot-engine-listings__map-searching-dot {
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  background: currentColor;
+  animation: be-listings-search-pulse 0.8s ease-in-out infinite alternate;
+}
+
 .barefoot-engine-listings__mount.be-listings-initial-pricing .lm-card-price-value::before {
   content: 'Starts at ';
 }
@@ -163,7 +258,7 @@
   display: grid !important;
 }
 
-.barefoot-engine-listings__mount.be-listings-searching .lm-listings-grid,
+.barefoot-engine-listings__mount.be-listings-searching .lm-listings-grid:not(.barefoot-engine-listings__skeleton-grid),
 .barefoot-engine-listings__mount.be-listings-searching .lm-pagination {
   display: none !important;
 }

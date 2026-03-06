@@ -143,6 +143,108 @@ class Property_Sync_Service
     /**
      * @return array<string, mixed>|WP_Error
      */
+    public function sync_property_by_id(string $property_id): array|WP_Error
+    {
+        $normalized_property_id = trim($property_id);
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        $existing_record = $this->find_existing_property_record($normalized_property_id);
+        $existing_post_id = isset($existing_record['post_id']) ? (int) $existing_record['post_id'] : 0;
+        if ($existing_post_id > 0) {
+            return $this->sync_single_property_id($normalized_property_id, $existing_post_id);
+        }
+
+        $settings = $this->api_settings->get_settings();
+        if (!$this->api_settings->has_required_credentials($settings)) {
+            return new WP_Error(
+                'barefoot_engine_property_missing_credentials',
+                __('Please save your Barefoot API credentials before syncing properties.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        $amenity_state = $this->resolve_amenity_state($settings, $this->get_sync_state(), false);
+        if (is_wp_error($amenity_state)) {
+            return $amenity_state;
+        }
+
+        $amenity_labels = $amenity_state['amenity_labels'];
+        $amenity_types = $amenity_state['amenity_types'];
+        $property = $this->fetch_property_details_payload($settings, $normalized_property_id);
+        if (is_wp_error($property)) {
+            return $property;
+        }
+
+        $property = $this->enrich_property_with_images($property, $settings);
+        if (is_wp_error($property)) {
+            return $property;
+        }
+
+        $result = $this->sync_property_payload(null, $property, time(), $amenity_labels, $amenity_types);
+        if (is_wp_error($result)) {
+            return $result;
+        }
+
+        $state = $this->get_sync_state();
+        $state['amenity_labels'] = $amenity_labels;
+        $state['amenity_types'] = $amenity_types;
+        $state['field_keys'] = $this->normalize_field_keys(array_merge($state['field_keys'] ?? [], array_keys($property['fields'] ?? [])));
+        $this->persist_state($state);
+
+        return [
+            'result' => $result['result'],
+            'property_id' => $normalized_property_id,
+            'post_id' => isset($result['post_id']) ? (int) $result['post_id'] : 0,
+            'message' => __('This property was synced successfully.', 'barefoot-engine'),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|WP_Error
+     */
+    public function mark_property_missing_by_id(string $property_id): array|WP_Error
+    {
+        $normalized_property_id = trim($property_id);
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        $existing_record = $this->find_existing_property_record($normalized_property_id);
+        if (!is_array($existing_record) || !isset($existing_record['post_id'])) {
+            return [
+                'result' => 'not_found',
+                'property_id' => $normalized_property_id,
+                'post_id' => 0,
+                'message' => __('No local property record exists for this Barefoot Property ID.', 'barefoot-engine'),
+            ];
+        }
+
+        $post_id = (int) $existing_record['post_id'];
+        $marked_missing = $this->mark_property_missing($post_id, $existing_record);
+
+        return [
+            'result' => $marked_missing ? 'missing' : 'unchanged',
+            'property_id' => $normalized_property_id,
+            'post_id' => $post_id,
+            'message' => $marked_missing
+                ? __('The local property record was marked as missing.', 'barefoot-engine')
+                : __('The local property record was already marked as missing.', 'barefoot-engine'),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|WP_Error
+     */
     private function run_full_sync(): array|WP_Error
     {
         $settings = $this->api_settings->get_settings();
@@ -338,19 +440,35 @@ class Property_Sync_Service
             return $this->fail_sync($started_at, $state, $updated_ids_string, 'partial');
         }
 
-        $property_ids = $this->parser->parse_last_updated_property_ids($updated_ids_string);
-        if (is_wp_error($property_ids)) {
-            return $this->fail_sync($started_at, $state, $property_ids, 'partial');
+        $parsed_changes = $this->parser->parse_last_updated_property_changes($updated_ids_string);
+        if (is_wp_error($parsed_changes)) {
+            return $this->fail_sync($started_at, $state, $parsed_changes, 'partial');
+        }
+
+        $property_ids = isset($parsed_changes['all_update_property_ids']) && is_array($parsed_changes['all_update_property_ids'])
+            ? array_values($parsed_changes['all_update_property_ids'])
+            : [];
+        $cancelled_property_ids = isset($parsed_changes['cancelled_property_ids']) && is_array($parsed_changes['cancelled_property_ids'])
+            ? array_values($parsed_changes['cancelled_property_ids'])
+            : [];
+        $cancelled_lookup = array_fill_keys($cancelled_property_ids, true);
+        if ($cancelled_lookup !== []) {
+            $property_ids = array_values(
+                array_filter(
+                    $property_ids,
+                    static fn(string $property_id): bool => !isset($cancelled_lookup[$property_id])
+                )
+            );
         }
 
         $summary = $this->normalize_summary([]);
         $summary['started_at'] = $started_at;
         $summary['skipped_items'] = [];
-        $summary['total_seen'] = count($property_ids);
+        $summary['total_seen'] = count($property_ids) + count($cancelled_property_ids);
         $field_keys = $this->normalize_field_keys($state['field_keys'] ?? []);
         $existing = $this->get_existing_post_map();
 
-        if ($property_ids === []) {
+        if ($property_ids === [] && $cancelled_property_ids === []) {
             $summary['finished_at'] = time();
 
             $final_state = $this->build_success_state(
@@ -370,21 +488,24 @@ class Property_Sync_Service
             ];
         }
 
-        $this->update_progress(
-            $state,
-            [
-                'stage' => 'fetching_images',
-                'current' => 0,
-                'total' => count($property_ids),
-                'message' => sprintf(
-                    /* translators: %d: total properties to process in partial sync */
-                    __('Syncing property 0 of %d…', 'barefoot-engine'),
-                    count($property_ids)
-                ),
-            ]
-        );
-
         $completed = 0;
+        $total_to_process = count($property_ids) + count($cancelled_property_ids);
+
+        if ($total_to_process > 0) {
+            $this->update_progress(
+                $state,
+                [
+                    'stage' => 'fetching_images',
+                    'current' => 0,
+                    'total' => $total_to_process,
+                    'message' => sprintf(
+                        /* translators: %d: total properties to process in partial sync */
+                        __('Syncing property 0 of %d…', 'barefoot-engine'),
+                        $total_to_process
+                    ),
+                ]
+            );
+        }
 
         foreach ($property_ids as $property_id) {
             $property = $this->fetch_property_details_payload($settings, $property_id);
@@ -400,8 +521,8 @@ class Property_Sync_Service
                     $state,
                     [
                         'current' => $completed,
-                        'total' => count($property_ids),
-                        'message' => $this->build_progress_message($completed, count($property_ids)),
+                        'total' => $total_to_process,
+                        'message' => $this->build_progress_message($completed, $total_to_process),
                         'current_property_id' => '',
                         'current_property_title' => '',
                     ]
@@ -423,8 +544,8 @@ class Property_Sync_Service
                     $state,
                     [
                         'current' => $completed,
-                        'total' => count($property_ids),
-                        'message' => $this->build_progress_message($completed, count($property_ids)),
+                        'total' => $total_to_process,
+                        'message' => $this->build_progress_message($completed, $total_to_process),
                         'current_property_id' => '',
                         'current_property_title' => '',
                     ]
@@ -450,10 +571,41 @@ class Property_Sync_Service
                 $state,
                 [
                     'current' => $completed,
-                    'total' => count($property_ids),
-                    'message' => $this->build_progress_message($completed, count($property_ids), $property_id, $property['title'] ?? ''),
+                    'total' => $total_to_process,
+                    'message' => $this->build_progress_message($completed, $total_to_process, $property_id, $property['title'] ?? ''),
                     'current_property_id' => $property_id,
                     'current_property_title' => isset($property['title']) && is_string($property['title']) ? $property['title'] : '',
+                ]
+            );
+        }
+
+        foreach ($cancelled_property_ids as $cancelled_property_id) {
+            $record = $existing[$cancelled_property_id] ?? null;
+            if (is_array($record)) {
+                $marked_missing = $this->mark_property_missing((int) $record['post_id'], $record);
+                if ($marked_missing) {
+                    $summary['deactivated']++;
+                } else {
+                    $summary['unchanged']++;
+                }
+            } else {
+                $summary['skipped']++;
+                $summary['skipped_items'][] = [
+                    'property_id' => $cancelled_property_id,
+                    'reason' => 'property_not_found',
+                    'message' => __('The cancelled property does not exist in local synced records.', 'barefoot-engine'),
+                ];
+            }
+
+            $completed++;
+            $this->update_progress(
+                $state,
+                [
+                    'current' => $completed,
+                    'total' => $total_to_process,
+                    'message' => $this->build_progress_message($completed, $total_to_process, $cancelled_property_id, __('Cancelled property', 'barefoot-engine')),
+                    'current_property_id' => $cancelled_property_id,
+                    'current_property_title' => __('Cancelled property', 'barefoot-engine'),
                 ]
             );
         }
@@ -462,8 +614,8 @@ class Property_Sync_Service
             $state,
             [
                 'stage' => 'finalizing',
-                'current' => count($property_ids),
-                'total' => count($property_ids),
+                'current' => $completed,
+                'total' => $total_to_process,
                 'message' => __('Finalizing partial sync state…', 'barefoot-engine'),
                 'current_property_id' => '',
                 'current_property_title' => '',
@@ -1039,6 +1191,56 @@ class Property_Sync_Service
         }
 
         return $map;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function find_existing_property_record(string $property_id): ?array
+    {
+        $normalized_property_id = trim($property_id);
+        if ($normalized_property_id === '') {
+            return null;
+        }
+
+        $post_ids = get_posts(
+            [
+                'post_type' => Property_Post_Type::POST_TYPE,
+                'post_status' => ['publish', 'draft', 'private', 'pending'],
+                'posts_per_page' => 1,
+                'orderby' => 'ID',
+                'order' => 'DESC',
+                'fields' => 'ids',
+                'meta_key' => '_be_property_id',
+                'meta_value' => $normalized_property_id,
+                'no_found_rows' => true,
+                'update_post_meta_cache' => false,
+                'update_post_term_cache' => false,
+            ]
+        );
+
+        $post_id = isset($post_ids[0]) ? (int) $post_ids[0] : 0;
+        if ($post_id <= 0) {
+            return null;
+        }
+
+        $imported = (string) get_post_meta($post_id, '_be_property_imported', true);
+        if ($imported !== '1') {
+            return null;
+        }
+
+        $post = get_post($post_id);
+        if (!$post instanceof \WP_Post) {
+            return null;
+        }
+
+        return [
+            'post_id' => $post_id,
+            'source_hash' => (string) get_post_meta($post_id, '_be_property_source_hash', true),
+            'import_status' => (string) get_post_meta($post_id, '_be_property_import_status', true),
+            'post_status' => $post->post_status,
+            'title' => $post->post_title,
+        ];
     }
 
     /**

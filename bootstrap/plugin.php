@@ -6,6 +6,7 @@ use BarefootEngine\Admin\Admin;
 use BarefootEngine\Integrations\Github_Updater;
 use BarefootEngine\Properties\Property_Admin_Actions;
 use BarefootEngine\Properties\Property_Availability_Service;
+use BarefootEngine\Properties\Property_Delta_Refresh_Service;
 use BarefootEngine\Properties\Property_Listings_Provider;
 use BarefootEngine\Properties\Property_Metaboxes;
 use BarefootEngine\Properties\Property_Post_Type;
@@ -37,6 +38,7 @@ class Plugin
     private ?Property_Taxonomies $property_taxonomies = null;
     private ?Property_Sync_Service $property_sync_service = null;
     private ?Property_Availability_Service $property_availability_service = null;
+    private ?Property_Delta_Refresh_Service $property_delta_refresh_service = null;
 
     public function __construct()
     {
@@ -46,6 +48,7 @@ class Plugin
         $this->define_property_hooks();
         $this->define_rest_hooks();
         $this->define_integration_hooks();
+        $this->define_cron_hooks();
     }
 
     private function define_admin_hooks(): void
@@ -85,8 +88,9 @@ class Plugin
         $general_controller = new General_Settings_Controller($general_settings);
         $updates_service = new Updates_Service();
         $updates_controller = new Updates_Controller($updates_service);
-        $properties_controller = new Properties_Controller($this->get_property_sync_service());
-        $availability_controller = new Property_Availability_Controller($this->get_property_availability_service());
+        $delta_refresh_service = $this->get_property_delta_refresh_service();
+        $properties_controller = new Properties_Controller($this->get_property_sync_service(), $delta_refresh_service);
+        $availability_controller = new Property_Availability_Controller($this->get_property_availability_service(), $delta_refresh_service);
 
         $this->loader->add_action('rest_api_init', $controller, 'register_routes', 10, 0);
         $this->loader->add_action('rest_api_init', $general_controller, 'register_routes', 10, 0);
@@ -114,6 +118,15 @@ class Plugin
         $updater = new Github_Updater();
 
         $this->loader->add_action('plugins_loaded', $updater, 'register', 20);
+    }
+
+    private function define_cron_hooks(): void
+    {
+        $delta_refresh_service = $this->get_property_delta_refresh_service();
+
+        $this->loader->add_filter('cron_schedules', $delta_refresh_service, 'register_cron_schedule', 10, 1);
+        $this->loader->add_action('init', $delta_refresh_service, 'ensure_scheduled_event', 20, 0);
+        $this->loader->add_action(Property_Delta_Refresh_Service::CRON_HOOK, $delta_refresh_service, 'run_scheduled_event', 10, 0);
     }
 
     public function run(): void
@@ -172,5 +185,20 @@ class Plugin
         }
 
         return $this->property_availability_service;
+    }
+
+    private function get_property_delta_refresh_service(): Property_Delta_Refresh_Service
+    {
+        if (!$this->property_delta_refresh_service instanceof Property_Delta_Refresh_Service) {
+            $this->property_delta_refresh_service = new Property_Delta_Refresh_Service(
+                $this->get_api_client(),
+                $this->get_api_settings(),
+                null,
+                $this->get_property_sync_service(),
+                $this->get_property_availability_service()
+            );
+        }
+
+        return $this->property_delta_refresh_service;
     }
 }

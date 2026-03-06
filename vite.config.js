@@ -5,6 +5,18 @@ export default defineConfig({
   root: '.',
   base: './',
   publicDir: false,
+  resolve: {
+    alias: {
+      '@braudypedrosa/bp-search-widget/styles': path.resolve(
+        __dirname,
+        'node_modules/@braudypedrosa/bp-search-widget/src/bp-search-widget.scss'
+      ),
+      '@braudypedrosa/bp-search-widget': path.resolve(
+        __dirname,
+        'node_modules/@braudypedrosa/bp-search-widget/src/bp-search-widget.js'
+      ),
+    },
+  },
   build: {
     manifest: true,
     outDir: 'assets/dist',

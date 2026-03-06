@@ -27,6 +27,10 @@ if (!defined('ABSPATH')) {
 | 'showLocation' => bool
 |   Show or hide the location field.
 |
+| 'filterDisplayMode' => 'modal' | 'left-slide'
+|   Filter panel presentation mode.
+|   Plugin default is 'left-slide'.
+|
 | 'showFilterButton' => bool
 |   Show or hide the filter button.
 |   Note: the filter button only renders when filters exist.
@@ -139,6 +143,7 @@ if (!defined('ABSPATH')) {
 return [
     'default' => [
         'showLocation' => false,
+        'filterDisplayMode' => 'left-slide',
         'showFilterButton' => false,
         'locationLabel' => 'Location',
         'locationPlaceholder' => 'Where are you going?',

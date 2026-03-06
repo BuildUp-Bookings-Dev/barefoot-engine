@@ -57,6 +57,7 @@ class Frontend
                 [
                     'restBase' => esc_url_raw(rest_url('barefoot-engine/v1/')),
                     'availabilitySearchEndpoint' => 'availability/search',
+                    'availabilityPreflightEndpoint' => 'availability/preflight',
                 ]
             );
         }

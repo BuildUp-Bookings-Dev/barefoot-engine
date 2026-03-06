@@ -64,13 +64,6 @@ class Barefoot_Api_Client
     public function fetch_last_updated_property_ids_string(array $settings, string $last_access_time): string|WP_Error
     {
         $normalized_last_access_time = trim($last_access_time);
-        if ($normalized_last_access_time === '') {
-            return new WP_Error(
-                'barefoot_engine_property_missing_last_access_time',
-                __('A last access time is required to fetch updated Barefoot property IDs.', 'barefoot-engine'),
-                ['status' => 400]
-            );
-        }
 
         return $this->request_xml_string_method(
             'GetLastUpdatedPropertyIDs',
@@ -205,16 +198,26 @@ class Barefoot_Api_Client
     public function fetch_last_avail_changed_properties_string(array $settings, string $last_access): string|WP_Error
     {
         $normalized_last_access = trim($last_access);
-        if ($normalized_last_access === '') {
-            return new WP_Error(
-                'barefoot_engine_availability_missing_last_access',
-                __('A valid last-access timestamp is required to probe availability changes.', 'barefoot-engine'),
-                ['status' => 400]
-            );
-        }
 
         return $this->request_xml_string_method(
             'GetLastAvailChangedProperties',
+            $settings,
+            [
+                'LastAccess' => $normalized_last_access,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
+    public function fetch_last_avail_changed_properties_test_string(array $settings, string $last_access): string|WP_Error
+    {
+        $normalized_last_access = trim($last_access);
+
+        return $this->request_xml_string_method(
+            'GetLastAvailChangedPropertiesTest',
             $settings,
             [
                 'LastAccess' => $normalized_last_access,

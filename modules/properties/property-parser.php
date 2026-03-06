@@ -105,40 +105,148 @@ class Property_Parser
     }
 
     /**
+     * @return array{
+     *     newly_added_property_ids: array<int, string>,
+     *     updated_properties: array<int, array{property_id: string, type: string, source_key: string}>,
+     *     updated_property_ids: array<int, string>,
+     *     cancelled_property_ids: array<int, string>,
+     *     all_update_property_ids: array<int, string>,
+     *     update_types_by_property_id: array<string, array<int, string>>
+     * }|WP_Error
+     */
+    public function parse_last_updated_property_changes(string $payload): array|WP_Error
+    {
+        $normalized = trim($payload);
+        $changes = [
+            'newly_added_property_ids' => [],
+            'updated_properties' => [],
+            'updated_property_ids' => [],
+            'cancelled_property_ids' => [],
+            'all_update_property_ids' => [],
+            'update_types_by_property_id' => [],
+        ];
+
+        if ($normalized === '') {
+            return $changes;
+        }
+
+        $document = $this->load_document_with_wrapped_roots($normalized);
+
+        if ($document === null) {
+            $fallback_ids = $this->parse_property_ids_from_text($normalized);
+            $changes['updated_property_ids'] = $fallback_ids;
+            $changes['all_update_property_ids'] = $fallback_ids;
+
+            return $changes;
+        }
+
+        $xpath = new \DOMXPath($document);
+
+        $new_nodes = $xpath->query('//*[local-name()="NewlyAddedPropertyIDs"]//*[local-name()="PropertyID"]');
+        if ($new_nodes !== false) {
+            foreach ($new_nodes as $new_node) {
+                if (!$new_node instanceof \DOMElement) {
+                    continue;
+                }
+
+                $property_id = trim($new_node->textContent);
+                if ($property_id === '' || in_array($property_id, $changes['newly_added_property_ids'], true)) {
+                    continue;
+                }
+
+                $changes['newly_added_property_ids'][] = $property_id;
+            }
+        }
+
+        $updated_nodes = $xpath->query('//*[local-name()="LastUpdatedPropertyIDs"]//*[local-name()="Property"]');
+        if ($updated_nodes !== false) {
+            foreach ($updated_nodes as $updated_node) {
+                if (!$updated_node instanceof \DOMElement) {
+                    continue;
+                }
+
+                $property_id = $this->read_first_matching_child_text($updated_node, ['PropertyID', 'propertyid', 'addressid', 'AddressID']);
+                if ($property_id === '') {
+                    continue;
+                }
+
+                $update_type = $this->read_first_matching_child_text($updated_node, ['type', 'Type']);
+                $source_key = $this->read_first_matching_child_text($updated_node, ['PropertyID', 'propertyid', 'addressid', 'AddressID'], true);
+
+                $changes['updated_properties'][] = [
+                    'property_id' => $property_id,
+                    'type' => $update_type,
+                    'source_key' => $source_key,
+                ];
+
+                if (!in_array($property_id, $changes['updated_property_ids'], true)) {
+                    $changes['updated_property_ids'][] = $property_id;
+                }
+
+                if ($update_type !== '') {
+                    $existing_types = $changes['update_types_by_property_id'][$property_id] ?? [];
+                    if (!in_array($update_type, $existing_types, true)) {
+                        $existing_types[] = $update_type;
+                    }
+
+                    $changes['update_types_by_property_id'][$property_id] = $existing_types;
+                }
+            }
+        }
+
+        $cancelled_nodes = $xpath->query('//*[local-name()="CancelledPropertyIDs"]//*[local-name()="PropertyID"]');
+        if ($cancelled_nodes !== false) {
+            foreach ($cancelled_nodes as $cancelled_node) {
+                if (!$cancelled_node instanceof \DOMElement) {
+                    continue;
+                }
+
+                $property_id = trim($cancelled_node->textContent);
+                if ($property_id === '' || in_array($property_id, $changes['cancelled_property_ids'], true)) {
+                    continue;
+                }
+
+                $changes['cancelled_property_ids'][] = $property_id;
+            }
+        }
+
+        if (
+            $changes['newly_added_property_ids'] === []
+            && $changes['updated_property_ids'] === []
+            && $changes['cancelled_property_ids'] === []
+        ) {
+            $fallback_ids = $this->parse_property_ids_from_text($normalized);
+            $changes['updated_property_ids'] = $fallback_ids;
+            $changes['all_update_property_ids'] = $fallback_ids;
+
+            return $changes;
+        }
+
+        $changes['all_update_property_ids'] = array_values(
+            array_unique(
+                array_merge(
+                    $changes['newly_added_property_ids'],
+                    $changes['updated_property_ids']
+                )
+            )
+        );
+
+        return $changes;
+    }
+
+    /**
      * @return array<int, string>|WP_Error
      */
     public function parse_last_updated_property_ids(string $payload): array|WP_Error
     {
-        $normalized = trim($payload);
-        if ($normalized === '') {
-            return [];
+        $changes = $this->parse_last_updated_property_changes($payload);
+        if (is_wp_error($changes)) {
+            return $changes;
         }
 
-        $parts = preg_split('/[\s,]+/', $normalized);
-        if (!is_array($parts)) {
-            return new WP_Error(
-                'barefoot_engine_property_invalid_last_updated_ids',
-                __('Barefoot returned invalid updated property IDs.', 'barefoot-engine'),
-                ['status' => 502]
-            );
-        }
-
-        $property_ids = [];
-
-        foreach ($parts as $part) {
-            if (!is_scalar($part)) {
-                continue;
-            }
-
-            $property_id = trim((string) $part);
-            if ($property_id === '' || in_array($property_id, $property_ids, true)) {
-                continue;
-            }
-
-            $property_ids[] = $property_id;
-        }
-
-        return $property_ids;
+        return isset($changes['all_update_property_ids']) && is_array($changes['all_update_property_ids'])
+            ? $changes['all_update_property_ids']
+            : [];
     }
 
     /**
@@ -322,13 +430,18 @@ class Property_Parser
      */
     public function parse_last_avail_changed_properties(string $xml): array|WP_Error
     {
-        $document = $this->load_document($xml);
+        $normalized = trim($xml);
+        if ($normalized === '' || stripos($normalized, 'No Changed Data') !== false) {
+            return [
+                'property_ids' => [],
+            ];
+        }
+
+        $document = $this->load_document_with_wrapped_roots($normalized);
         if ($document === null) {
-            return new WP_Error(
-                'barefoot_engine_property_invalid_availability_probe_xml',
-                __('Barefoot returned invalid availability change XML.', 'barefoot-engine'),
-                ['status' => 502]
-            );
+            return [
+                'property_ids' => $this->parse_property_ids_from_text($normalized),
+            ];
         }
 
         $xpath = new \DOMXPath($document);
@@ -498,6 +611,78 @@ class Property_Parser
         }
 
         return $document;
+    }
+
+    private function load_document_with_wrapped_roots(string $xml): ?\DOMDocument
+    {
+        $document = $this->load_document($xml);
+        if ($document instanceof \DOMDocument) {
+            return $document;
+        }
+
+        $trimmed = trim($xml);
+        if ($trimmed === '' || strpos($trimmed, '<') === false) {
+            return null;
+        }
+
+        return $this->load_document('<BarefootPayload>' . $trimmed . '</BarefootPayload>');
+    }
+
+    /**
+     * @param array<int, string> $keys
+     */
+    private function read_first_matching_child_text(\DOMElement $node, array $keys, bool $return_key = false): string
+    {
+        foreach ($node->childNodes as $child) {
+            if (!$child instanceof \DOMElement) {
+                continue;
+            }
+
+            if (!in_array($child->localName, $keys, true)) {
+                continue;
+            }
+
+            return $return_key ? $child->localName : trim($child->textContent);
+        }
+
+        return '';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function parse_property_ids_from_text(string $payload): array
+    {
+        $normalized = trim($payload);
+        if ($normalized === '' || stripos($normalized, 'No Changed Data') !== false) {
+            return [];
+        }
+
+        $parts = preg_split('/[\s,]+/', $normalized);
+        if (!is_array($parts)) {
+            return [];
+        }
+
+        $property_ids = [];
+
+        foreach ($parts as $part) {
+            if (!is_scalar($part)) {
+                continue;
+            }
+
+            $property_id = trim((string) $part);
+            if ($property_id === '' || strpos($property_id, '<') !== false || strpos($property_id, '>') !== false) {
+                continue;
+            }
+
+            if (in_array($property_id, $property_ids, true)) {
+                continue;
+            }
+
+            $property_ids[] = $property_id;
+        }
+
+        return $property_ids;
     }
 
     /**

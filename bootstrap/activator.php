@@ -2,6 +2,8 @@
 
 namespace BarefootEngine\Core;
 
+use BarefootEngine\Properties\Property_Delta_Refresh_Service;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -21,6 +23,10 @@ class Activator
                     'api_key' => '',
                 ]
             );
+        }
+
+        if (!wp_next_scheduled(Property_Delta_Refresh_Service::CRON_HOOK)) {
+            wp_schedule_single_event(time() + 120, Property_Delta_Refresh_Service::CRON_HOOK);
         }
 
         flush_rewrite_rules();

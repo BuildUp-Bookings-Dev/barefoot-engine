@@ -3,6 +3,7 @@
 namespace BarefootEngine\REST;
 
 use BarefootEngine\Properties\Property_Availability_Service;
+use BarefootEngine\Properties\Property_Delta_Refresh_Service;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
@@ -17,10 +18,15 @@ class Property_Availability_Controller
     private const REST_BASE = 'availability';
 
     private Property_Availability_Service $availability_service;
+    private Property_Delta_Refresh_Service $delta_refresh_service;
 
-    public function __construct(?Property_Availability_Service $availability_service = null)
+    public function __construct(
+        ?Property_Availability_Service $availability_service = null,
+        ?Property_Delta_Refresh_Service $delta_refresh_service = null
+    )
     {
         $this->availability_service = $availability_service ?? new Property_Availability_Service();
+        $this->delta_refresh_service = $delta_refresh_service ?? new Property_Delta_Refresh_Service();
     }
 
     public function register_routes(): void
@@ -32,6 +38,18 @@ class Property_Availability_Controller
                 [
                     'methods' => WP_REST_Server::CREATABLE,
                     'callback' => [$this, 'search'],
+                    'permission_callback' => '__return_true',
+                ],
+            ]
+        );
+
+        register_rest_route(
+            self::NAMESPACE,
+            '/' . self::REST_BASE . '/preflight',
+            [
+                [
+                    'methods' => WP_REST_Server::CREATABLE,
+                    'callback' => [$this, 'preflight'],
                     'permission_callback' => '__return_true',
                 ],
             ]
@@ -51,6 +69,22 @@ class Property_Availability_Controller
         if (is_wp_error($result)) {
             return $result;
         }
+
+        return rest_ensure_response(
+            [
+                'success' => true,
+                'data' => $result,
+            ]
+        );
+    }
+
+    public function preflight(WP_REST_Request $request): WP_REST_Response
+    {
+        $reason = $request->get_param('reason');
+        $normalized_reason = is_scalar($reason) && trim((string) $reason) !== ''
+            ? trim((string) $reason)
+            : 'availability-preflight';
+        $result = $this->delta_refresh_service->maybe_queue_refresh($normalized_reason);
 
         return rest_ensure_response(
             [

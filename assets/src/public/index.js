@@ -6,6 +6,8 @@ const SEARCH_WIDGET_SELECTOR = '[data-be-search-widget]';
 const LISTINGS_SELECTOR = '[data-be-listings]';
 const ListingsMap = listingsMapModule?.ListingsMap ?? listingsMapModule ?? null;
 const AJAX_SEARCH_MIN_BUFFER_MS = 1500;
+const CHOICE_POPOVER_SCROLLBAR_MIN_THUMB = 44;
+const choicePopoverScrollbarStates = new WeakMap();
 
 if (typeof window !== 'undefined') {
   if (!window.BPCalendar) {
@@ -89,6 +91,9 @@ function bootListingsWidgets() {
     const fieldTypeMap = buildFieldTypeMap(searchWidgetConfig);
     const initialSearchPayload = parseSearchPayloadFromUrl(window.location.search);
     const hasInitialSearch = hasSearchPayload(initialSearchPayload);
+    const hasInitialWidgetValues = hasInitialSearch
+      || !isEmptyValue(initialSearchPayload.checkIn)
+      || !isEmptyValue(initialSearchPayload.checkOut);
     const filteredListings = hasInitialSearch
       ? allListings.filter((listing) => matchListing(listing, initialSearchPayload, fieldTypeMap))
       : allListings;
@@ -124,8 +129,9 @@ function bootListingsWidgets() {
                 runAjaxListingsSearch(mountNode, fieldTypeMap, payload);
               },
             });
+            installListingsSearchSubmitRule(searchWidget);
 
-            if (hasInitialSearch) {
+            if (hasInitialWidgetValues) {
               applySearchPayloadToWidgetState(searchWidget, initialSearchPayload);
             }
             mountNode.beEmbeddedSearchWidget = searchWidget;
@@ -150,6 +156,7 @@ function bootListingsWidgets() {
       alignToolbarControls(mountNode);
       updateClearSearchButton(mountNode);
       updateListingsCount(mountNode, filteredListings.length);
+      triggerAvailabilityPreflight(initialSearchPayload, 'initial-load');
       maybeRefineListingsWithAvailability(mountNode, fieldTypeMap, initialSearchPayload);
     } catch (error) {
       console.error('[barefoot-engine] Failed to initialize listings widget.', error);
@@ -383,11 +390,321 @@ function appendPayloadValue(target, rawKey, value) {
 }
 
 function hasSearchPayload(payload) {
-  return !isEmptyValue(payload.location)
-    || !isEmptyValue(payload.checkIn)
-    || !isEmptyValue(payload.checkOut)
-    || Object.keys(payload.customFields || {}).length > 0
-    || Object.keys(payload.filters || {}).length > 0;
+  return !isEmptyValue(payload?.location)
+    || hasNonEmptyPayloadEntries(payload?.customFields)
+    || hasNonEmptyPayloadEntries(payload?.filters);
+}
+
+function hasNonEmptyPayloadEntries(values) {
+  if (!isPlainObject(values)) {
+    return false;
+  }
+
+  return Object.values(values).some((value) => {
+    if (Array.isArray(value)) {
+      return value.some((entry) => !isEmptyValue(entry));
+    }
+
+    return !isEmptyValue(value);
+  });
+}
+
+function installListingsSearchSubmitRule(widget) {
+  if (!widget || widget.isDestroyed) {
+    return;
+  }
+
+  widget.beInitialNonDateCriteria = captureNonDateCriteriaSnapshot(widget);
+  installCustomChoicePopoverScrollbar(widget);
+
+  widget.canSubmitSearch = function canSubmitSearchForListings() {
+    const hasRequiredFields = typeof this.hasRequiredFieldsFilled === 'function'
+      ? this.hasRequiredFieldsFilled()
+      : true;
+    const hasRequiredFilters = typeof this.hasRequiredFiltersFilled === 'function'
+      ? this.hasRequiredFiltersFilled()
+      : true;
+
+    if (!hasRequiredFields || !hasRequiredFilters) {
+      return false;
+    }
+
+    return hasAtLeastOneNonDateCriterion(this, this.beInitialNonDateCriteria || null);
+  };
+
+  if (typeof widget.syncSearchDisabledState === 'function') {
+    widget.syncSearchDisabledState();
+  }
+}
+
+function installCustomChoicePopoverScrollbar(widget) {
+  if (!widget || widget.isDestroyed || widget.beCustomChoiceScrollbarInstalled) {
+    return;
+  }
+
+  const originalOpenChoicePopover = typeof widget.openChoicePopover === 'function'
+    ? widget.openChoicePopover.bind(widget)
+    : null;
+  const originalCloseChoicePopover = typeof widget.closeChoicePopover === 'function'
+    ? widget.closeChoicePopover.bind(widget)
+    : null;
+
+  if (!originalOpenChoicePopover || !originalCloseChoicePopover) {
+    return;
+  }
+
+  widget.openChoicePopover = function patchedOpenChoicePopover(...args) {
+    const result = originalOpenChoicePopover(...args);
+    window.requestAnimationFrame(() => {
+      syncCustomChoicePopoverScrollbar(this);
+    });
+    return result;
+  };
+
+  widget.closeChoicePopover = function patchedCloseChoicePopover(...args) {
+    teardownCustomChoicePopoverScrollbarForWidget(this);
+    return originalCloseChoicePopover(...args);
+  };
+
+  widget.beCustomChoiceScrollbarInstalled = true;
+}
+
+function syncCustomChoicePopoverScrollbar(widget) {
+  const popover = widget?.openPopover?.popover;
+  if (!(popover instanceof HTMLElement)) {
+    return;
+  }
+
+  const state = ensureCustomChoicePopoverScrollbar(popover);
+  if (!state) {
+    return;
+  }
+
+  updateCustomChoicePopoverScrollbar(popover, state);
+}
+
+function teardownCustomChoicePopoverScrollbarForWidget(widget) {
+  const popover = widget?.openPopover?.popover;
+  if (!(popover instanceof HTMLElement)) {
+    return;
+  }
+
+  teardownCustomChoicePopoverScrollbar(popover);
+}
+
+function ensureCustomChoicePopoverScrollbar(popover) {
+  if (!(popover instanceof HTMLElement) || !popover.classList.contains('bp-search-widget__popover')) {
+    return null;
+  }
+
+  const existing = choicePopoverScrollbarStates.get(popover);
+  if (existing) {
+    return existing;
+  }
+
+  const track = document.createElement('div');
+  track.className = 'barefoot-engine-choice-scrollbar is-hidden';
+  track.setAttribute('aria-hidden', 'true');
+
+  const thumb = document.createElement('div');
+  thumb.className = 'barefoot-engine-choice-scrollbar__thumb';
+  track.appendChild(thumb);
+  popover.appendChild(track);
+
+  const onScroll = () => {
+    const state = choicePopoverScrollbarStates.get(popover);
+    if (!state) {
+      return;
+    }
+    updateCustomChoicePopoverScrollbar(popover, state);
+  };
+
+  popover.addEventListener('scroll', onScroll, { passive: true });
+
+  const state = {
+    track,
+    thumb,
+    onScroll,
+    resizeObserver: null,
+    onWindowResize: null,
+  };
+
+  if (typeof ResizeObserver === 'function') {
+    const resizeObserver = new ResizeObserver(() => {
+      const latestState = choicePopoverScrollbarStates.get(popover);
+      if (!latestState) {
+        return;
+      }
+      updateCustomChoicePopoverScrollbar(popover, latestState);
+    });
+    resizeObserver.observe(popover);
+    state.resizeObserver = resizeObserver;
+  } else {
+    const onWindowResize = () => {
+      const latestState = choicePopoverScrollbarStates.get(popover);
+      if (!latestState) {
+        return;
+      }
+      updateCustomChoicePopoverScrollbar(popover, latestState);
+    };
+    window.addEventListener('resize', onWindowResize);
+    state.onWindowResize = onWindowResize;
+  }
+
+  choicePopoverScrollbarStates.set(popover, state);
+  return state;
+}
+
+function updateCustomChoicePopoverScrollbar(popover, state) {
+  if (!(popover instanceof HTMLElement) || !state?.track || !state?.thumb) {
+    return;
+  }
+
+  const overflow = popover.scrollHeight - popover.clientHeight;
+  if (overflow <= 1) {
+    state.track.classList.add('is-hidden');
+    state.thumb.style.height = '';
+    state.thumb.style.transform = 'translateY(0px)';
+    return;
+  }
+
+  const trackHeight = state.track.clientHeight;
+  if (trackHeight <= 0) {
+    return;
+  }
+
+  const rawThumbHeight = Math.round((popover.clientHeight / popover.scrollHeight) * trackHeight);
+  const thumbHeight = Math.min(trackHeight, Math.max(CHOICE_POPOVER_SCROLLBAR_MIN_THUMB, rawThumbHeight));
+  const maxThumbTop = Math.max(0, trackHeight - thumbHeight);
+  const thumbTop = maxThumbTop === 0
+    ? 0
+    : Math.round((popover.scrollTop / overflow) * maxThumbTop);
+
+  state.track.classList.remove('is-hidden');
+  state.thumb.style.height = `${thumbHeight}px`;
+  state.thumb.style.transform = `translateY(${thumbTop}px)`;
+}
+
+function teardownCustomChoicePopoverScrollbar(popover) {
+  const state = choicePopoverScrollbarStates.get(popover);
+  if (!state) {
+    return;
+  }
+
+  popover.removeEventListener('scroll', state.onScroll);
+  if (state.resizeObserver) {
+    state.resizeObserver.disconnect();
+  }
+  if (state.onWindowResize) {
+    window.removeEventListener('resize', state.onWindowResize);
+  }
+  if (state.track && state.track.parentElement === popover) {
+    state.track.remove();
+  }
+
+  choicePopoverScrollbarStates.delete(popover);
+}
+
+function captureNonDateCriteriaSnapshot(widget) {
+  return {
+    location: normalizeString(widget?.state?.location ?? ''),
+    customFields: normalizeComparableMap(widget?.state?.customFields),
+    filters: normalizeComparableMap(widget?.state?.filters),
+  };
+}
+
+function normalizeComparableMap(values) {
+  if (!isPlainObject(values)) {
+    return {};
+  }
+
+  const normalized = {};
+  Object.entries(values).forEach(([key, value]) => {
+    normalized[key] = normalizeComparableValue(value);
+  });
+
+  return normalized;
+}
+
+function normalizeComparableValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => normalizeString(entry))
+      .filter(Boolean)
+      .sort();
+  }
+
+  return normalizeString(value);
+}
+
+function isComparableValueMeaningful(value) {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  return typeof value === 'string' && value !== '';
+}
+
+function areComparableValuesEqual(left, right) {
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  return String(left ?? '') === String(right ?? '');
+}
+
+function hasChangedMeaningfulEntry(currentMap, baselineMap) {
+  const keys = new Set([
+    ...Object.keys(isPlainObject(currentMap) ? currentMap : {}),
+    ...Object.keys(isPlainObject(baselineMap) ? baselineMap : {}),
+  ]);
+
+  for (const key of keys) {
+    const currentValue = currentMap[key];
+    const baselineValue = baselineMap[key];
+
+    if (!areComparableValuesEqual(currentValue, baselineValue) && isComparableValueMeaningful(currentValue)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasAtLeastOneNonDateCriterion(widget, baseline = null) {
+  if (!widget || widget.isDestroyed) {
+    return false;
+  }
+
+  const currentSnapshot = captureNonDateCriteriaSnapshot(widget);
+  const baselineSnapshot = isPlainObject(baseline) ? baseline : {
+    location: '',
+    customFields: {},
+    filters: {},
+  };
+
+  if (
+    currentSnapshot.location !== baselineSnapshot.location
+    && currentSnapshot.location !== ''
+  ) {
+    return true;
+  }
+
+  if (hasChangedMeaningfulEntry(currentSnapshot.customFields, baselineSnapshot.customFields)) {
+    return true;
+  }
+
+  return hasChangedMeaningfulEntry(currentSnapshot.filters, baselineSnapshot.filters);
 }
 
 function matchListing(listing, payload, fieldTypeMap) {
@@ -617,22 +934,112 @@ function finishListingsSearch(mountNode, token, startedAt = Number.NaN) {
   finalize();
 }
 
+function applyListingsAndFinishSearch(mountNode, token, startedAt, listings) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const nextListings = Array.isArray(listings) ? listings : [];
+
+  const finalize = () => {
+    if (Number(mountNode.beSearchToken) !== Number(token)) {
+      return;
+    }
+
+    setListingsSearching(mountNode, false);
+
+    if (mountNode.beListingsWidget && typeof mountNode.beListingsWidget.setListings === 'function') {
+      mountNode.beListingsWidget.setListings(nextListings);
+    }
+
+    updateListingsCount(mountNode, nextListings.length);
+
+    if (mountNode.beHasActiveSearch) {
+      focusMapOnFirstResult(mountNode, nextListings);
+    }
+  };
+
+  const remainingMs = getRemainingSearchBufferMs(startedAt);
+  if (remainingMs > 0) {
+    window.setTimeout(finalize, remainingMs);
+    return;
+  }
+
+  finalize();
+}
+
+function focusMapOnFirstResult(mountNode, listings) {
+  if (!(mountNode instanceof HTMLElement) || !Array.isArray(listings) || listings.length === 0) {
+    return;
+  }
+
+  const widget = mountNode.beListingsWidget;
+  if (!widget || typeof widget !== 'object') {
+    return;
+  }
+
+  const firstMappableListing = listings.find(
+    (listing) => listing
+      && typeof listing.id === 'string'
+      && Number.isFinite(Number(listing.lat))
+      && Number.isFinite(Number(listing.lng)),
+  );
+
+  if (!firstMappableListing) {
+    return;
+  }
+
+  if (typeof widget.panToListing === 'function') {
+    widget.panToListing(firstMappableListing.id);
+  }
+
+  const mapInstance = widget.map;
+  if (!mapInstance || typeof mapInstance.setView !== 'function') {
+    return;
+  }
+
+  const lat = Number(firstMappableListing.lat);
+  const lng = Number(firstMappableListing.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return;
+  }
+
+  const currentZoom = typeof mapInstance.getZoom === 'function'
+    ? Number(mapInstance.getZoom())
+    : 0;
+  const targetZoom = Number.isFinite(currentZoom) ? Math.max(currentZoom, 14) : 14;
+
+  mapInstance.setView([lat, lng], targetZoom, { animate: true });
+}
+
 function maybeRefineListingsWithAvailability(mountNode, fieldTypeMap, payload, searchContext = {}) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
   const token = Number.isFinite(searchContext?.token)
     ? Number(searchContext.token)
     : beginListingsSearch(mountNode);
   const startedAt = Number.isFinite(searchContext?.startedAt)
     ? Number(searchContext.startedAt)
     : Number.NaN;
+  const allListings = Array.isArray(mountNode.beAllListings) ? mountNode.beAllListings : [];
+  const baseListings = Array.isArray(searchContext?.baseListings)
+    ? searchContext.baseListings
+    : (
+      hasSearchPayload(payload)
+        ? allListings.filter((listing) => matchListing(listing, payload, fieldTypeMap))
+        : allListings
+    );
 
-  if (!(mountNode instanceof HTMLElement) || !hasValidDateRangePayload(payload)) {
-    finishListingsSearch(mountNode, token, startedAt);
+  if (!hasSearchPayload(payload) || !hasValidDateRangePayload(payload)) {
+    applyListingsAndFinishSearch(mountNode, token, startedAt, baseListings);
     return;
   }
 
   const restUrl = buildAvailabilitySearchUrl();
   if (!restUrl) {
-    finishListingsSearch(mountNode, token, startedAt);
+    applyListingsAndFinishSearch(mountNode, token, startedAt, baseListings);
     return;
   }
 
@@ -667,7 +1074,6 @@ function maybeRefineListingsWithAvailability(mountNode, fieldTypeMap, payload, s
         : [];
 
       const availableLookup = new Set(availablePropertyIds);
-      const allListings = Array.isArray(mountNode.beAllListings) ? mountNode.beAllListings : [];
       const refinedListings = allListings
         .filter((listing) => {
           const propertyId = typeof listing?.propertyId === 'string'
@@ -677,17 +1083,11 @@ function maybeRefineListingsWithAvailability(mountNode, fieldTypeMap, payload, s
           return propertyId !== '' && availableLookup.has(propertyId);
         })
         .filter((listing) => matchListing(listing, payload, fieldTypeMap));
-
-      if (mountNode.beListingsWidget && typeof mountNode.beListingsWidget.setListings === 'function') {
-        mountNode.beListingsWidget.setListings(refinedListings);
-      }
-      updateListingsCount(mountNode, refinedListings.length);
-
-      finishListingsSearch(mountNode, token, startedAt);
+      applyListingsAndFinishSearch(mountNode, token, startedAt, refinedListings);
     })
     .catch((error) => {
       console.warn('[barefoot-engine] Failed to refine listings with live availability.', error);
-      finishListingsSearch(mountNode, token, startedAt);
+      applyListingsAndFinishSearch(mountNode, token, startedAt, baseListings);
     });
 }
 
@@ -710,20 +1110,36 @@ function runAjaxListingsSearch(mountNode, fieldTypeMap, payload) {
     ? allListings.filter((listing) => matchListing(listing, payload, fieldTypeMap))
     : allListings;
 
-  if (mountNode.beListingsWidget && typeof mountNode.beListingsWidget.setListings === 'function') {
-    mountNode.beListingsWidget.setListings(filteredListings);
-  }
-
-  updateListingsCount(mountNode, filteredListings.length);
-
-  if (!hasValidDateRangePayload(payload)) {
-    finishListingsSearch(mountNode, searchToken, searchStartedAt);
-    return;
-  }
-
+  triggerAvailabilityPreflight(payload, 'search');
   maybeRefineListingsWithAvailability(mountNode, fieldTypeMap, payload, {
     token: searchToken,
     startedAt: searchStartedAt,
+    baseListings: filteredListings,
+  });
+}
+
+function triggerAvailabilityPreflight(payload, reason = 'search') {
+  if (!hasValidDateRangePayload(payload)) {
+    return;
+  }
+
+  const preflightUrl = buildAvailabilityPreflightUrl();
+  if (!preflightUrl) {
+    return;
+  }
+
+  fetch(preflightUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      reason,
+      check_in: payload?.checkIn ?? '',
+      check_out: payload?.checkOut ?? '',
+    }),
+  }).catch((error) => {
+    console.warn('[barefoot-engine] Availability preflight request failed.', error);
   });
 }
 
@@ -741,6 +1157,22 @@ function buildAvailabilitySearchUrl() {
   const endpoint = typeof bootstrap.availabilitySearchEndpoint === 'string'
     ? bootstrap.availabilitySearchEndpoint
     : 'availability/search';
+
+  if (!restBase) {
+    return '';
+  }
+
+  return new URL(endpoint, restBase).toString();
+}
+
+function buildAvailabilityPreflightUrl() {
+  const bootstrap = typeof window !== 'undefined' && isPlainObject(window.BarefootEnginePublic)
+    ? window.BarefootEnginePublic
+    : {};
+  const restBase = typeof bootstrap.restBase === 'string' ? bootstrap.restBase : '';
+  const endpoint = typeof bootstrap.availabilityPreflightEndpoint === 'string'
+    ? bootstrap.availabilityPreflightEndpoint
+    : 'availability/preflight';
 
   if (!restBase) {
     return '';
@@ -851,6 +1283,32 @@ function ensureListingsSkeleton(mountNode) {
   gridNode.parentElement.insertBefore(skeletonGrid, gridNode);
 
   return skeletonGrid;
+}
+
+function ensureMapSearchingOverlay(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return null;
+  }
+
+  const mapPanel = mountNode.querySelector('.lm-map-panel');
+  if (!(mapPanel instanceof HTMLElement)) {
+    return null;
+  }
+
+  const existing = mapPanel.querySelector('.barefoot-engine-listings__map-searching');
+  if (existing instanceof HTMLElement) {
+    return existing;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'barefoot-engine-listings__map-searching';
+  overlay.setAttribute('role', 'status');
+  overlay.setAttribute('aria-live', 'polite');
+  overlay.hidden = true;
+  overlay.innerHTML = '<span class="barefoot-engine-listings__map-searching-dot" aria-hidden="true"></span><span>Updating map…</span>';
+  mapPanel.appendChild(overlay);
+
+  return overlay;
 }
 
 function applySearchPayloadToWidgetState(widget, payload) {
@@ -1008,6 +1466,11 @@ function setListingsSearching(mountNode, isSearching) {
 
   if (isSearching) {
     ensureListingsSkeleton(mountNode);
+  }
+
+  const mapOverlay = ensureMapSearchingOverlay(mountNode);
+  if (mapOverlay instanceof HTMLElement) {
+    mapOverlay.hidden = !isSearching;
   }
 
   const metaNode = ensureListingsMeta(mountNode);
