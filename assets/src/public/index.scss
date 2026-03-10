@@ -322,6 +322,407 @@
   }
 }
 
+.barefoot-engine-booking-widget {
+  margin-block: 1.5rem;
+  width: 100%;
+}
+
+.barefoot-engine-booking-widget__panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  padding: 1.1rem;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+}
+
+.barefoot-engine-booking-widget__header {
+  margin-bottom: 0.9rem;
+}
+
+.barefoot-engine-booking-widget__title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #0f172a;
+}
+
+.barefoot-engine-booking-widget__controls {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.barefoot-engine-booking-widget__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.barefoot-engine-booking-widget__label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4b5563;
+}
+
+.barefoot-engine-booking-widget__guests-select {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #d1d5db;
+  border-radius: 0.8rem;
+  padding: 0.68rem 2.4rem 0.68rem 0.85rem;
+  font-size: 1rem;
+  line-height: 1.2;
+  color: #0f172a;
+  background: #fff;
+  background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%), linear-gradient(135deg, #6b7280 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.barefoot-engine-booking-widget__guests-select:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.barefoot-engine-booking-widget__status {
+  margin: 0.85rem 0 0;
+  min-height: 1.45rem;
+  font-size: 0.93rem;
+  font-weight: 600;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.barefoot-engine-booking-widget__status[data-state='loading'] {
+  color: #1d4ed8;
+}
+
+.barefoot-engine-booking-widget__status[data-state='loading']::before {
+  content: '';
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.55;
+  animation: be-booking-status-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.barefoot-engine-booking-widget__status[data-state='success'] {
+  color: #166534;
+}
+
+.barefoot-engine-booking-widget__status[data-state='error'] {
+  color: #b91c1c;
+}
+
+.barefoot-engine-booking-widget__summary {
+  margin-top: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.8rem;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.barefoot-engine-booking-widget__summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.62rem 0.8rem;
+  font-size: 0.95rem;
+  color: #334155;
+}
+
+.barefoot-engine-booking-widget__summary-row + .barefoot-engine-booking-widget__summary-row {
+  border-top: 1px solid #e2e8f0;
+}
+
+.barefoot-engine-booking-widget__summary-row strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.barefoot-engine-booking-widget__summary-row--total {
+  background: #eef2ff;
+}
+
+.barefoot-engine-booking-widget__summary-row--total strong {
+  font-size: 1rem;
+}
+
+.barefoot-engine-booking-widget.be-booking-missing-context .barefoot-engine-booking-widget__panel {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+
+.barefoot-engine-pricing-table {
+  margin-block: 1.5rem;
+  width: 100%;
+}
+
+.barefoot-engine-pricing-table__panel {
+  border: 1px solid #d1d5db;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 1rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.barefoot-engine-pricing-table__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.8rem;
+}
+
+.barefoot-engine-pricing-table__title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 300;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #2f4b59;
+}
+
+.barefoot-engine-pricing-table__search {
+  flex: 0 1 300px;
+  width: 100%;
+}
+
+.barefoot-engine-pricing-table__search[hidden] {
+  display: none !important;
+}
+
+.barefoot-engine-pricing-table__search-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #d1d5db;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.96rem;
+  line-height: 1.3;
+  padding: 0.62rem 0.85rem;
+  box-sizing: border-box;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.barefoot-engine-pricing-table__search-input:focus-visible {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+.barefoot-engine-pricing-table__table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  overflow: auto;
+}
+
+.barefoot-engine-pricing-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.barefoot-engine-pricing-table__table th,
+.barefoot-engine-pricing-table__table td {
+  border: 1px solid #e2e8f0;
+  padding: 0.78rem 1rem;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-size: 1.02rem;
+  color: #0f172a;
+}
+
+.barefoot-engine-pricing-table__table th {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.barefoot-engine-pricing-table__table td:first-child {
+  text-align: center;
+}
+
+.barefoot-engine-pricing-table__table tbody tr:nth-child(even) {
+  background: #fcfdff;
+}
+
+.barefoot-engine-pricing-table__table tbody tr:hover {
+  background: #f1f5f9;
+}
+
+.barefoot-engine-pricing-table__sort {
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.barefoot-engine-pricing-table__sort-indicator {
+  font-size: 0.78rem;
+  line-height: 1;
+  color: #64748b;
+}
+
+.barefoot-engine-pricing-table__sort[data-active='true'] .barefoot-engine-pricing-table__sort-indicator {
+  color: #1d4ed8;
+}
+
+.barefoot-engine-pricing-table__empty {
+  margin: 0;
+  padding: 1rem 1.1rem;
+  font-size: 0.95rem;
+  color: #64748b;
+}
+
+@media (max-width: 767px) {
+  .barefoot-engine-pricing-table__title {
+    font-size: 1.45rem;
+  }
+
+  .barefoot-engine-pricing-table__table th,
+  .barefoot-engine-pricing-table__table td {
+    font-size: 0.95rem;
+    padding: 0.62rem 0.7rem;
+  }
+}
+
+/*
+ * Theme override guard rails.
+ * Keep critical widget controls visually stable even when theme globals
+ * target form controls, links, and hover/focus states.
+ */
+.barefoot-engine-public .bp-widget-reset a,
+.barefoot-engine-public .bp-widget-reset a:hover,
+.barefoot-engine-public .bp-widget-reset a:focus,
+.barefoot-engine-public .bp-widget-reset a:active {
+  color: inherit !important;
+  text-decoration: none !important;
+}
+
+.barefoot-engine-public .bp-search-widget__input,
+.barefoot-engine-public .bp-search-widget__trigger,
+.barefoot-engine-public .bp-search-widget__filter-input,
+.barefoot-engine-public .bp-search-widget__counter-input,
+.barefoot-engine-public .bp-search-widget__filter-card .bp-search-widget__trigger,
+.barefoot-engine-public .bp-search-widget .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-input {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.barefoot-engine-public .bp-search-widget__input:hover,
+.barefoot-engine-public .bp-search-widget__trigger:hover,
+.barefoot-engine-public .bp-search-widget__filter-input:hover,
+.barefoot-engine-public .bp-search-widget__counter-input:hover,
+.barefoot-engine-public .bp-search-widget__filter-card .bp-search-widget__trigger:hover,
+.barefoot-engine-public .bp-search-widget .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-input:hover {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.barefoot-engine-public .bp-search-widget__input:focus,
+.barefoot-engine-public .bp-search-widget__input:focus-visible,
+.barefoot-engine-public .bp-search-widget__trigger:focus,
+.barefoot-engine-public .bp-search-widget__trigger:focus-visible,
+.barefoot-engine-public .bp-search-widget__filter-input:focus,
+.barefoot-engine-public .bp-search-widget__filter-input:focus-visible,
+.barefoot-engine-public .bp-search-widget__counter-input:focus,
+.barefoot-engine-public .bp-search-widget__counter-input:focus-visible,
+.barefoot-engine-public .bp-search-widget__filter-card .bp-search-widget__trigger:focus,
+.barefoot-engine-public .bp-search-widget__filter-card .bp-search-widget__trigger:focus-visible,
+.barefoot-engine-public .bp-search-widget .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-input:focus,
+.barefoot-engine-public .bp-search-widget .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-input:focus-visible {
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.barefoot-engine-public .barefoot-engine-booking-widget__guests-select,
+.barefoot-engine-public .barefoot-engine-pricing-table__search-input,
+.barefoot-engine-public .barefoot-engine-booking-widget .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-input {
+  background: #fff !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: none !important;
+}
+
+.barefoot-engine-public .barefoot-engine-booking-widget__guests-select:hover,
+.barefoot-engine-public .barefoot-engine-pricing-table__search-input:hover,
+.barefoot-engine-public .barefoot-engine-booking-widget .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-input:hover {
+  border-color: #9ca3af !important;
+}
+
+.barefoot-engine-public .barefoot-engine-booking-widget__guests-select:focus,
+.barefoot-engine-public .barefoot-engine-booking-widget__guests-select:focus-visible,
+.barefoot-engine-public .barefoot-engine-pricing-table__search-input:focus,
+.barefoot-engine-public .barefoot-engine-pricing-table__search-input:focus-visible,
+.barefoot-engine-public .barefoot-engine-booking-widget .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-input:focus,
+.barefoot-engine-public .barefoot-engine-booking-widget .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-input:focus-visible {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 1px #2563eb !important;
+  outline: none !important;
+}
+
+.barefoot-engine-public .bp-search-widget__popover,
+.barefoot-engine-public .bp-search-widget__popover--floating,
+.barefoot-engine-public .bp-search-widget__filter-panel,
+.barefoot-engine-public .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-popup {
+  border: 1px solid #d1d5db !important;
+  background: #fff !important;
+}
+
+.barefoot-engine-public .bp-calendar-day-price {
+  margin-top: 0.1rem !important;
+  font-size: 0.62rem !important;
+  font-weight: 600 !important;
+  line-height: 1.05 !important;
+  letter-spacing: 0 !important;
+  color: #475569 !important;
+}
+
+.barefoot-engine-public .bp-calendar-day-selected .bp-calendar-day-price,
+.barefoot-engine-public .bp-calendar-day-range-start .bp-calendar-day-price,
+.barefoot-engine-public .bp-calendar-day-range-end .bp-calendar-day-price {
+  color: #fff !important;
+}
+
+@keyframes be-booking-status-pulse {
+  from {
+    transform: scale(0.85);
+    opacity: 0.45;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .bp-calendar-tooltip {
   z-index: 999999 !important;
 }
