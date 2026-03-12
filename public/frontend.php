@@ -55,12 +55,14 @@ class Frontend
                 self::PUBLIC_SCRIPT_HANDLE,
                 'BarefootEnginePublic',
                 [
-                    'restBase' => esc_url_raw(rest_url('barefoot-engine/v1/')),
-                    'availabilitySearchEndpoint' => 'availability/search',
-                    'availabilityPreflightEndpoint' => 'availability/preflight',
-                ]
-            );
-        }
+                'restBase' => esc_url_raw(rest_url('barefoot-engine/v1/')),
+                'availabilitySearchEndpoint' => 'availability/search',
+                'availabilityPreflightEndpoint' => 'availability/preflight',
+                'bookingCalendarEndpoint' => 'booking/calendar',
+                'bookingQuoteEndpoint' => 'booking/quote',
+            ]
+        );
+    }
     }
 
     public function mark_module_scripts(string $tag, string $handle, string $src): string

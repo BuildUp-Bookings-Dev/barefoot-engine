@@ -471,6 +471,137 @@ class Property_Parser
     }
 
     /**
+     * @return array{
+     *     blocked_ranges: array<int, array{arrival_date: string, departure_date: string}>,
+     *     raw_xml: string
+     * }|WP_Error
+     */
+    public function parse_property_booking_dates(string $xml): array|WP_Error
+    {
+        $document = $this->load_document($xml);
+        if ($document === null) {
+            return new WP_Error(
+                'barefoot_engine_property_invalid_booking_xml',
+                __('Barefoot returned invalid blocked booking date XML.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $blocked_ranges = [];
+        $xpath = new \DOMXPath($document);
+        $row_nodes = $xpath->query('//*[local-name()="Table"]');
+        if ($row_nodes === false) {
+            $row_nodes = [];
+        }
+
+        foreach ($row_nodes as $row_node) {
+            if (!$row_node instanceof \DOMElement) {
+                continue;
+            }
+
+            $arrival_raw = $this->read_child_text($row_node, 'ArrivalDate');
+            $departure_raw = $this->read_child_text($row_node, 'DepartureDate');
+            $arrival_date = $this->normalize_booking_date($arrival_raw);
+            $departure_date = $this->normalize_booking_date($departure_raw);
+
+            if ($arrival_date === '' || $departure_date === '') {
+                continue;
+            }
+
+            if ($departure_date <= $arrival_date) {
+                continue;
+            }
+
+            $blocked_ranges[] = [
+                'arrival_date' => $arrival_date,
+                'departure_date' => $departure_date,
+            ];
+        }
+
+        return [
+            'blocked_ranges' => $blocked_ranges,
+            'raw_xml' => trim($xml),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     items: array<int, array{name: string, value: string, amount: float|null, rate_id: string}>,
+     *     raw_payload: string
+     * }|WP_Error
+     */
+    public function parse_quote_rates_detail(string $payload): array|WP_Error
+    {
+        $normalized = trim($payload);
+        if ($normalized === '') {
+            return new WP_Error(
+                'barefoot_engine_property_invalid_quote_payload',
+                __('Barefoot returned an empty quote payload.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $document = $this->load_document_with_wrapped_roots($normalized);
+        if ($document === null) {
+            return new WP_Error(
+                'barefoot_engine_property_invalid_quote_payload',
+                __('Barefoot returned an invalid quote payload.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $items = [];
+        $xpath = new \DOMXPath($document);
+        $row_nodes = $xpath->query('//*[local-name()="propertyratesdetails"]');
+        if ($row_nodes === false) {
+            $row_nodes = [];
+        }
+
+        foreach ($row_nodes as $row_node) {
+            if (!$row_node instanceof \DOMElement) {
+                continue;
+            }
+
+            $name = '';
+            $value = '';
+            $rate_id = '';
+
+            foreach ($row_node->childNodes as $child_node) {
+                if (!$child_node instanceof \DOMElement) {
+                    continue;
+                }
+
+                $key = strtolower(trim($child_node->localName));
+                $text = trim($child_node->textContent);
+
+                if ($key === 'ratesname') {
+                    $name = $text;
+                } elseif ($key === 'ratesvalue') {
+                    $value = $text;
+                } elseif ($key === 'ratesid') {
+                    $rate_id = $text;
+                }
+            }
+
+            if ($name === '' && $value === '') {
+                continue;
+            }
+
+            $items[] = [
+                'name' => $name,
+                'value' => $value,
+                'amount' => $this->normalize_rate_amount($value),
+                'rate_id' => $rate_id,
+            ];
+        }
+
+        return [
+            'items' => $items,
+            'raw_payload' => $normalized,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>|WP_Error
      */
     public function parse_property_images(string $xml): array|WP_Error
@@ -928,6 +1059,31 @@ class Property_Parser
         }
 
         return $normalized;
+    }
+
+    private function normalize_booking_date(mixed $value): string
+    {
+        $normalized = is_scalar($value) ? trim((string) $value) : '';
+        if ($normalized === '') {
+            return '';
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $normalized) === 1) {
+            return $normalized;
+        }
+
+        $formats = ['m/d/Y', 'n/j/Y', 'm/j/Y', 'n/d/Y'];
+
+        foreach ($formats as $format) {
+            $date = \DateTimeImmutable::createFromFormat('!' . $format, $normalized, wp_timezone());
+            if (!$date instanceof \DateTimeImmutable) {
+                continue;
+            }
+
+            return $date->format('Y-m-d');
+        }
+
+        return '';
     }
 
     private function normalize_rate_amount(mixed $value): ?float

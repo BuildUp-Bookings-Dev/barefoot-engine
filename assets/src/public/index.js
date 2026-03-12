@@ -4,9 +4,12 @@ import { BPSearchWidget, BP_SearchWidget } from '@braudypedrosa/bp-search-widget
 
 const SEARCH_WIDGET_SELECTOR = '[data-be-search-widget]';
 const LISTINGS_SELECTOR = '[data-be-listings]';
+const BOOKING_WIDGET_SELECTOR = '[data-be-booking-widget]';
+const PRICING_TABLE_SELECTOR = '[data-be-pricing-table]';
 const ListingsMap = listingsMapModule?.ListingsMap ?? listingsMapModule ?? null;
 const AJAX_SEARCH_MIN_BUFFER_MS = 1500;
 const CHOICE_POPOVER_SCROLLBAR_MIN_THUMB = 44;
+const BOOKING_QUOTE_DEBOUNCE_MS = 350;
 const choicePopoverScrollbarStates = new WeakMap();
 
 if (typeof window !== 'undefined') {
@@ -1524,16 +1527,1091 @@ function alignToolbarControls(mountNode) {
   }
 }
 
+function bootPricingTables() {
+  const mounts = document.querySelectorAll(PRICING_TABLE_SELECTOR);
+
+  mounts.forEach((mountNode) => {
+    if (!(mountNode instanceof HTMLElement) || mountNode.dataset.bePricingTableReady === 'true') {
+      return;
+    }
+
+    const configId = mountNode.dataset.bePricingTableConfig;
+    const config = readWidgetConfig(configId, 'Pricing table');
+    if (!isPlainObject(config)) {
+      return;
+    }
+
+    try {
+      initializePricingTable(mountNode, config);
+      mountNode.dataset.bePricingTableReady = 'true';
+    } catch (error) {
+      console.error('[barefoot-engine] Failed to initialize pricing table.', error);
+    }
+  });
+}
+
+function initializePricingTable(mountNode, config) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const title = sanitizeBookingText(config?.title, 'Rates');
+  const showSearch = config?.showSearch !== false;
+  const searchPlaceholder = sanitizeBookingText(config?.searchPlaceholder, 'Search rates...');
+  const emptyText = sanitizeBookingText(config?.emptyText, 'No rates available for this property yet.');
+  const rows = normalizePricingRows(config?.rows);
+  const columns = normalizePricingColumns(config?.columns);
+  const sortConfig = isPlainObject(config?.sort) ? config.sort : {};
+  const initialSortKey = normalizePricingSortKey(sortConfig?.key);
+  const initialSortDirection = sortConfig?.direction === 'desc' ? 'desc' : 'asc';
+
+  mountNode.innerHTML = `
+    <section class="barefoot-engine-pricing-table__panel">
+      <header class="barefoot-engine-pricing-table__header">
+        <h3 class="barefoot-engine-pricing-table__title">${escapeHtml(title)}</h3>
+        <div class="barefoot-engine-pricing-table__search" ${showSearch ? '' : 'hidden'}>
+          <label class="screen-reader-text" for="${escapeHtml(mountNode.id)}-search">${escapeHtml(searchPlaceholder)}</label>
+          <input
+            id="${escapeHtml(mountNode.id)}-search"
+            class="barefoot-engine-pricing-table__search-input"
+            type="search"
+            placeholder="${escapeHtml(searchPlaceholder)}"
+            autocomplete="off"
+          />
+        </div>
+      </header>
+      <div class="barefoot-engine-pricing-table__table-wrap">
+        <table class="barefoot-engine-pricing-table__table">
+          <thead>
+            <tr>
+              <th scope="col">
+                <button type="button" class="barefoot-engine-pricing-table__sort" data-sort-key="date_start">
+                  <span>${escapeHtml(columns.dateRange)}</span>
+                  <span class="barefoot-engine-pricing-table__sort-indicator" aria-hidden="true"></span>
+                </button>
+              </th>
+              <th scope="col">
+                <button type="button" class="barefoot-engine-pricing-table__sort" data-sort-key="daily">
+                  <span>${escapeHtml(columns.daily)}</span>
+                  <span class="barefoot-engine-pricing-table__sort-indicator" aria-hidden="true"></span>
+                </button>
+              </th>
+              <th scope="col">
+                <button type="button" class="barefoot-engine-pricing-table__sort" data-sort-key="weekly">
+                  <span>${escapeHtml(columns.weekly)}</span>
+                  <span class="barefoot-engine-pricing-table__sort-indicator" aria-hidden="true"></span>
+                </button>
+              </th>
+              <th scope="col">
+                <button type="button" class="barefoot-engine-pricing-table__sort" data-sort-key="monthly">
+                  <span>${escapeHtml(columns.monthly)}</span>
+                  <span class="barefoot-engine-pricing-table__sort-indicator" aria-hidden="true"></span>
+                </button>
+              </th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="barefoot-engine-pricing-table__empty" hidden>${escapeHtml(emptyText)}</p>
+      </div>
+    </section>
+  `;
+
+  const bodyNode = mountNode.querySelector('tbody');
+  const emptyNode = mountNode.querySelector('.barefoot-engine-pricing-table__empty');
+  const searchInput = mountNode.querySelector('.barefoot-engine-pricing-table__search-input');
+  const sortButtons = mountNode.querySelectorAll('.barefoot-engine-pricing-table__sort');
+
+  if (!(bodyNode instanceof HTMLTableSectionElement) || !(emptyNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const state = {
+    rows,
+    query: '',
+    sortKey: initialSortKey,
+    sortDirection: initialSortDirection,
+    bodyNode,
+    emptyNode,
+    sortButtons,
+  };
+
+  const render = () => {
+    const visibleRows = getVisiblePricingRows(state.rows, state.query);
+    const sortedRows = sortPricingRows(visibleRows, state.sortKey, state.sortDirection);
+
+    if (sortedRows.length === 0) {
+      state.bodyNode.innerHTML = '';
+      state.emptyNode.hidden = false;
+    } else {
+      state.emptyNode.hidden = true;
+      state.bodyNode.innerHTML = sortedRows
+        .map((row) => renderPricingTableRow(row))
+        .join('');
+    }
+
+    state.sortButtons.forEach((buttonNode) => {
+      if (!(buttonNode instanceof HTMLButtonElement)) {
+        return;
+      }
+
+      const key = normalizePricingSortKey(buttonNode.dataset.sortKey);
+      const indicator = buttonNode.querySelector('.barefoot-engine-pricing-table__sort-indicator');
+      const isActive = key === state.sortKey;
+      buttonNode.dataset.active = isActive ? 'true' : 'false';
+      buttonNode.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+
+      if (indicator instanceof HTMLElement) {
+        indicator.textContent = isActive
+          ? (state.sortDirection === 'asc' ? '↑' : '↓')
+          : '↕';
+      }
+    });
+  };
+
+  if (searchInput instanceof HTMLInputElement) {
+    searchInput.addEventListener('input', () => {
+      state.query = String(searchInput.value || '').trim().toLowerCase();
+      render();
+    });
+  }
+
+  sortButtons.forEach((buttonNode) => {
+    if (!(buttonNode instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    buttonNode.addEventListener('click', () => {
+      const key = normalizePricingSortKey(buttonNode.dataset.sortKey);
+      if (key === state.sortKey) {
+        state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sortKey = key;
+        state.sortDirection = key === 'date_start' ? 'asc' : 'desc';
+      }
+
+      render();
+    });
+  });
+
+  render();
+}
+
+function normalizePricingColumns(columns) {
+  const normalized = isPlainObject(columns) ? columns : {};
+  return {
+    dateRange: sanitizeBookingText(normalized.dateRange, 'Date Range'),
+    daily: sanitizeBookingText(normalized.daily, 'Daily'),
+    weekly: sanitizeBookingText(normalized.weekly, 'Weekly'),
+    monthly: sanitizeBookingText(normalized.monthly, 'Monthly'),
+  };
+}
+
+function normalizePricingRows(rows) {
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows
+    .filter((row) => isPlainObject(row))
+    .map((row) => {
+      const dateRange = sanitizeBookingText(row.date_range, '');
+      const dailyDisplay = sanitizeBookingText(row.daily_display, 'N/A');
+      const weeklyDisplay = sanitizeBookingText(row.weekly_display, 'N/A');
+      const monthlyDisplay = sanitizeBookingText(row.monthly_display, 'N/A');
+      const searchIndex = sanitizeBookingText(
+        row.search_index,
+        `${dateRange} ${dailyDisplay} ${weeklyDisplay} ${monthlyDisplay}`,
+      ).toLowerCase();
+
+      return {
+        dateStart: sanitizeBookingText(row.date_start, ''),
+        dateRange,
+        daily: normalizePricingAmount(row.daily),
+        weekly: normalizePricingAmount(row.weekly),
+        monthly: normalizePricingAmount(row.monthly),
+        dailyDisplay,
+        weeklyDisplay,
+        monthlyDisplay,
+        searchIndex,
+      };
+    });
+}
+
+function normalizePricingAmount(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizePricingSortKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (['date_start', 'daily', 'weekly', 'monthly'].includes(key)) {
+    return key;
+  }
+
+  return 'date_start';
+}
+
+function getVisiblePricingRows(rows, query) {
+  if (!query) {
+    return rows.slice();
+  }
+
+  return rows.filter((row) => row.searchIndex.includes(query));
+}
+
+function sortPricingRows(rows, key, direction) {
+  const multiplier = direction === 'desc' ? -1 : 1;
+  const clone = rows.slice();
+
+  clone.sort((left, right) => {
+    if (key === 'date_start') {
+      return multiplier * left.dateStart.localeCompare(right.dateStart);
+    }
+
+    const leftValue = Number.isFinite(left[key]) ? Number(left[key]) : null;
+    const rightValue = Number.isFinite(right[key]) ? Number(right[key]) : null;
+
+    if (leftValue === null && rightValue === null) {
+      return 0;
+    }
+
+    if (leftValue === null) {
+      return 1;
+    }
+
+    if (rightValue === null) {
+      return -1;
+    }
+
+    if (leftValue === rightValue) {
+      return 0;
+    }
+
+    return leftValue > rightValue ? multiplier : -multiplier;
+  });
+
+  return clone;
+}
+
+function renderPricingTableRow(row) {
+  return `
+    <tr>
+      <td>${escapeHtml(row.dateRange)}</td>
+      <td>${escapeHtml(row.dailyDisplay)}</td>
+      <td>${escapeHtml(row.weeklyDisplay)}</td>
+      <td>${escapeHtml(row.monthlyDisplay)}</td>
+    </tr>
+  `;
+}
+
+function bootBookingWidgets() {
+  const mounts = document.querySelectorAll(BOOKING_WIDGET_SELECTOR);
+
+  mounts.forEach((mountNode) => {
+    if (!(mountNode instanceof HTMLElement) || mountNode.dataset.beBookingWidgetReady === 'true') {
+      return;
+    }
+
+    const configId = mountNode.dataset.beBookingWidgetConfig;
+    const config = readWidgetConfig(configId, 'Booking widget');
+    if (!isPlainObject(config)) {
+      return;
+    }
+
+    try {
+      initializeBookingWidget(mountNode, config);
+      mountNode.dataset.beBookingWidgetReady = 'true';
+    } catch (error) {
+      console.error('[barefoot-engine] Failed to initialize booking widget.', error);
+    }
+  });
+}
+
+function initializeBookingWidget(mountNode, config) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const runtime = buildBookingRuntime(config);
+  mountNode.innerHTML = runtime.markup;
+
+  const calendarHost = mountNode.querySelector('.barefoot-engine-booking-widget__calendar-host');
+  const guestsSelect = mountNode.querySelector('.barefoot-engine-booking-widget__guests-select');
+  const statusNode = mountNode.querySelector('.barefoot-engine-booking-widget__status');
+  const summaryNode = mountNode.querySelector('.barefoot-engine-booking-widget__summary');
+  const dailyValueNode = mountNode.querySelector('[data-be-booking-total="daily"]');
+  const subtotalValueNode = mountNode.querySelector('[data-be-booking-total="subtotal"]');
+  const taxValueNode = mountNode.querySelector('[data-be-booking-total="tax"]');
+  const totalValueNode = mountNode.querySelector('[data-be-booking-total="grand"]');
+
+  if (
+    !(calendarHost instanceof HTMLElement)
+    || !(guestsSelect instanceof HTMLSelectElement)
+    || !(statusNode instanceof HTMLElement)
+    || !(summaryNode instanceof HTMLElement)
+    || !(dailyValueNode instanceof HTMLElement)
+    || !(subtotalValueNode instanceof HTMLElement)
+    || !(taxValueNode instanceof HTMLElement)
+    || !(totalValueNode instanceof HTMLElement)
+  ) {
+    return;
+  }
+
+  const initialGuestValue = resolveInitialGuestValue(runtime.guestOptions, runtime.defaultGuestValue);
+  guestsSelect.innerHTML = runtime.guestOptions
+    .map((optionValue) => {
+      const escapedValue = escapeHtml(optionValue);
+      const selectedAttribute = optionValue === initialGuestValue ? ' selected' : '';
+      return `<option value="${escapedValue}"${selectedAttribute}>${escapedValue}</option>`;
+    })
+    .join('');
+
+  const state = {
+    propertyId: runtime.propertyId,
+    currency: runtime.currency,
+    reztypeid: runtime.reztypeid,
+    labels: runtime.labels,
+    mountNode,
+    calendar: null,
+    statusNode,
+    summaryNode,
+    dailyValueNode,
+    subtotalValueNode,
+    taxValueNode,
+    totalValueNode,
+    guestsSelect,
+    disabledDates: new Set(),
+    dailyPrices: new Map(),
+    loadedCalendarRangeKeys: new Set(),
+    calendarFetchInFlightKey: '',
+    checkIn: '',
+    checkOut: '',
+    quoteTimer: null,
+    quoteRequestToken: 0,
+  };
+
+  mountNode.beBookingWidgetState = state;
+  mountNode.classList.toggle('be-booking-missing-context', runtime.missingContext);
+
+  if (runtime.missingContext) {
+    guestsSelect.disabled = true;
+    setBookingStatus(state, 'missingContext', 'error');
+    renderBookingTotals(state, null);
+    return;
+  }
+
+  const calendar = new BPCalendar(calendarHost, {
+    mode: 'datepicker',
+    monthsToShow: runtime.calendarOptions.monthsToShow,
+    datepickerPlacement: runtime.calendarOptions.datepickerPlacement,
+    defaultMinDays: runtime.calendarOptions.defaultMinDays,
+    tooltipLabel: runtime.calendarOptions.tooltipLabel,
+    showTooltip: runtime.calendarOptions.showTooltip,
+    showClearButton: runtime.calendarOptions.showClearButton,
+    dateConfig: {},
+    onRangeSelect: (range) => {
+      handleBookingRangeSelect(state, range);
+    },
+  });
+
+  state.calendar = calendar;
+  patchCalendarPopupRender(state);
+
+  guestsSelect.addEventListener('change', () => {
+    if (!state.checkIn || !state.checkOut) {
+      setBookingStatus(state, 'idle', 'idle');
+      return;
+    }
+
+    scheduleBookingQuoteCheck(state);
+  });
+
+  setBookingStatus(state, 'idle', 'idle');
+  renderBookingTotals(state, null);
+  refreshBookingCalendarAvailability(state, true);
+}
+
+function buildBookingRuntime(config) {
+  const propertyId = sanitizeBookingPropertyId(config?.propertyId);
+  const missingContext = !propertyId || Boolean(config?.missingContext);
+  const currency = sanitizeBookingCurrency(config?.currency);
+  const reztypeid = sanitizeBookingReztypeid(config?.reztypeid, 26);
+  const calendarOptions = sanitizeBookingCalendarOptions(config?.calendarOptions);
+  const labels = buildBookingLabels(config?.labels);
+  const guestsLabel = sanitizeBookingText(config?.guests?.label, 'Guests');
+  const guestsPlaceholder = sanitizeBookingText(config?.guests?.placeholder, '');
+  const guestOptions = sanitizeBookingGuestOptions(config?.guests?.options);
+  const defaultGuestValue = sanitizeBookingText(config?.guests?.defaultValue, guestOptions[0]);
+  const title = labels.title;
+  const datesLabel = labels.dates;
+
+  return {
+    propertyId,
+    missingContext,
+    currency,
+    reztypeid,
+    calendarOptions,
+    labels,
+    guestOptions,
+    defaultGuestValue,
+    markup: `
+      <section class="barefoot-engine-booking-widget__panel">
+        <header class="barefoot-engine-booking-widget__header">
+          <h3 class="barefoot-engine-booking-widget__title">${escapeHtml(title)}</h3>
+        </header>
+        <div class="barefoot-engine-booking-widget__controls">
+          <div class="barefoot-engine-booking-widget__field barefoot-engine-booking-widget__field--dates">
+            <label class="barefoot-engine-booking-widget__label">${escapeHtml(datesLabel)}</label>
+            <div class="barefoot-engine-booking-widget__calendar-host"></div>
+          </div>
+          <div class="barefoot-engine-booking-widget__field barefoot-engine-booking-widget__field--guests">
+            <label class="barefoot-engine-booking-widget__label">${escapeHtml(guestsLabel)}</label>
+            <select class="barefoot-engine-booking-widget__guests-select" aria-label="${escapeHtml(guestsLabel)}" ${guestsPlaceholder ? `title="${escapeHtml(guestsPlaceholder)}"` : ''}></select>
+          </div>
+        </div>
+        <p class="barefoot-engine-booking-widget__status" role="status" aria-live="polite"></p>
+        <div class="barefoot-engine-booking-widget__summary" hidden>
+          <div class="barefoot-engine-booking-widget__summary-row">
+            <span>${escapeHtml(labels.daily)}</span>
+            <strong data-be-booking-total="daily"></strong>
+          </div>
+          <div class="barefoot-engine-booking-widget__summary-row">
+            <span>${escapeHtml(labels.subtotal)}</span>
+            <strong data-be-booking-total="subtotal"></strong>
+          </div>
+          <div class="barefoot-engine-booking-widget__summary-row">
+            <span>${escapeHtml(labels.tax)}</span>
+            <strong data-be-booking-total="tax"></strong>
+          </div>
+          <div class="barefoot-engine-booking-widget__summary-row barefoot-engine-booking-widget__summary-row--total">
+            <span>${escapeHtml(labels.total)}</span>
+            <strong data-be-booking-total="grand"></strong>
+          </div>
+        </div>
+      </section>
+    `,
+  };
+}
+
+function patchCalendarPopupRender(state) {
+  if (!state || !state.calendar || typeof state.calendar.renderCalendarInPopup !== 'function') {
+    return;
+  }
+
+  const originalRenderCalendarInPopup = state.calendar.renderCalendarInPopup.bind(state.calendar);
+  state.calendar.renderCalendarInPopup = (...args) => {
+    const result = originalRenderCalendarInPopup(...args);
+    refreshBookingCalendarAvailability(state, false);
+    return result;
+  };
+}
+
+function handleBookingRangeSelect(state, range) {
+  if (!state || !state.calendar) {
+    return;
+  }
+
+  const start = range?.start instanceof Date ? formatDateToYmd(range.start) : '';
+  const end = range?.end instanceof Date ? formatDateToYmd(range.end) : '';
+  state.checkIn = start;
+  state.checkOut = end;
+
+  if (!start || !end) {
+    renderBookingTotals(state, null);
+    setBookingStatus(state, 'idle', 'idle');
+    return;
+  }
+
+  scheduleBookingQuoteCheck(state);
+}
+
+function scheduleBookingQuoteCheck(state) {
+  if (!state || !state.propertyId || !state.checkIn || !state.checkOut) {
+    return;
+  }
+
+  if (state.quoteTimer) {
+    window.clearTimeout(state.quoteTimer);
+  }
+
+  state.quoteTimer = window.setTimeout(() => {
+    runBookingQuoteCheck(state);
+  }, BOOKING_QUOTE_DEBOUNCE_MS);
+}
+
+function runBookingQuoteCheck(state) {
+  if (!state || !state.propertyId || !state.checkIn || !state.checkOut) {
+    return;
+  }
+
+  const quoteUrl = buildBookingQuoteUrl();
+  if (!quoteUrl) {
+    setBookingStatus(state, 'error', 'error');
+    renderBookingTotals(state, null);
+    return;
+  }
+
+  const requestToken = Number(state.quoteRequestToken || 0) + 1;
+  state.quoteRequestToken = requestToken;
+  setBookingStatus(state, 'checking', 'loading');
+  renderBookingTotals(state, null);
+
+  fetch(quoteUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      property_id: state.propertyId,
+      check_in: state.checkIn,
+      check_out: state.checkOut,
+      guests: normalizeGuestCount(state.guestsSelect?.value),
+      reztypeid: state.reztypeid,
+    }),
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' && data.message.trim() !== ''
+          ? data.message
+          : state.labels.error;
+        throw new Error(message);
+      }
+
+      return data;
+    })
+    .then((response) => {
+      if (Number(state.quoteRequestToken) !== requestToken) {
+        return;
+      }
+
+      const payload = isPlainObject(response?.data) ? response.data : {};
+      if (payload.available !== true) {
+        setBookingStatus(state, 'unavailable', 'error');
+        renderBookingTotals(state, null);
+        return;
+      }
+
+      setBookingStatus(state, 'available', 'success');
+      renderBookingTotals(state, payload.totals);
+    })
+    .catch((error) => {
+      if (Number(state.quoteRequestToken) !== requestToken) {
+        return;
+      }
+
+      console.warn('[barefoot-engine] Booking quote check failed.', error);
+      setBookingStatus(state, 'error', 'error');
+      renderBookingTotals(state, null);
+    });
+}
+
+function refreshBookingCalendarAvailability(state, forceFetch = false) {
+  if (!state || !state.calendar || !state.propertyId) {
+    return;
+  }
+
+  const calendarUrl = buildBookingCalendarUrl();
+  if (!calendarUrl) {
+    return;
+  }
+
+  const range = resolveBookingCalendarRange(state.calendar);
+  if (!range) {
+    return;
+  }
+
+  const rangeKey = `${range.monthStart}:${range.monthEnd}`;
+  if (!forceFetch && state.loadedCalendarRangeKeys.has(rangeKey)) {
+    return;
+  }
+
+  if (state.calendarFetchInFlightKey === rangeKey) {
+    return;
+  }
+
+  state.calendarFetchInFlightKey = rangeKey;
+
+  fetch(calendarUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      property_id: state.propertyId,
+      month_start: range.monthStart,
+      month_end: range.monthEnd,
+    }),
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' && data.message.trim() !== ''
+          ? data.message
+          : 'Calendar availability request failed.';
+        throw new Error(message);
+      }
+
+      return data;
+    })
+    .then((response) => {
+      const payload = isPlainObject(response?.data) ? response.data : {};
+      const disabledDates = Array.isArray(payload.disabled_dates) ? payload.disabled_dates : [];
+      const dailyPrices = isPlainObject(payload.daily_prices) ? payload.daily_prices : {};
+      applyDisabledDatesForRange(state, range.monthStart, range.monthEnd, disabledDates, dailyPrices);
+      state.loadedCalendarRangeKeys.add(rangeKey);
+    })
+    .catch((error) => {
+      console.warn('[barefoot-engine] Booking calendar availability request failed.', error);
+    })
+    .finally(() => {
+      if (state.calendarFetchInFlightKey === rangeKey) {
+        state.calendarFetchInFlightKey = '';
+      }
+
+    });
+}
+
+function applyDisabledDatesForRange(state, monthStart, monthEnd, disabledDates, dailyPrices = {}) {
+  if (!state || !state.calendar || !isValidDateString(monthStart) || !isValidDateString(monthEnd)) {
+    return;
+  }
+
+  removeDateRangeFromDisabledSet(state.disabledDates, monthStart, monthEnd);
+  removeDateRangeFromPriceMap(state.dailyPrices, monthStart, monthEnd);
+
+  disabledDates.forEach((value) => {
+    const normalized = normalizeDateInput(value);
+    if (!isValidDateString(normalized)) {
+      return;
+    }
+
+    if (normalized < monthStart || normalized > monthEnd) {
+      return;
+    }
+
+    state.disabledDates.add(normalized);
+  });
+
+  Object.entries(dailyPrices).forEach(([dateKey, amountValue]) => {
+    const normalized = normalizeDateInput(dateKey);
+    if (!isValidDateString(normalized)) {
+      return;
+    }
+
+    if (normalized < monthStart || normalized > monthEnd) {
+      return;
+    }
+
+    const amount = Number(amountValue);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return;
+    }
+
+    state.dailyPrices.set(normalized, amount);
+  });
+
+  const dateConfig = {};
+  state.disabledDates.forEach((disabledDate) => {
+    dateConfig[disabledDate] = {
+      date: disabledDate,
+      isDisabled: true,
+    };
+  });
+  state.dailyPrices.forEach((amount, pricedDate) => {
+    const priceText = formatBookingCalendarPrice(amount, state.currency);
+    const currentConfig = isPlainObject(dateConfig[pricedDate]) ? dateConfig[pricedDate] : { date: pricedDate };
+
+    dateConfig[pricedDate] = {
+      ...currentConfig,
+      date: pricedDate,
+      price: priceText,
+    };
+  });
+
+  applyBookingCalendarDateConfig(state, dateConfig);
+}
+
+function applyBookingCalendarDateConfig(state, dateConfig) {
+  if (!state || !state.calendar || !isPlainObject(dateConfig)) {
+    return;
+  }
+
+  const calendar = state.calendar;
+  const isDatepickerMode = calendar.options?.mode === 'datepicker';
+
+  if (!isDatepickerMode || typeof calendar.renderCalendarInPopup !== 'function') {
+    if (typeof calendar.updateOptions === 'function') {
+      calendar.updateOptions({
+        dateConfig,
+      });
+    }
+    return;
+  }
+
+  const popupWasOpen = Boolean(
+    calendar.popupWrapper instanceof HTMLElement
+    && calendar.popupWrapper.style.display !== 'none',
+  );
+
+  calendar.options = {
+    ...calendar.options,
+    dateConfig,
+  };
+
+  calendar.renderCalendarInPopup();
+
+  if (typeof calendar.attachDatepickerEventListeners === 'function') {
+    calendar.attachDatepickerEventListeners();
+  }
+
+  if (popupWasOpen && typeof calendar.positionPopup === 'function') {
+    calendar.positionPopup();
+  }
+}
+
+function removeDateRangeFromDisabledSet(disabledDates, startDate, endDate) {
+  if (!(disabledDates instanceof Set)) {
+    return;
+  }
+
+  let cursor = parseYmdDate(startDate);
+  const end = parseYmdDate(endDate);
+  if (!(cursor instanceof Date) || !(end instanceof Date)) {
+    return;
+  }
+
+  while (cursor.getTime() <= end.getTime()) {
+    disabledDates.delete(formatDateToYmd(cursor));
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+  }
+}
+
+function removeDateRangeFromPriceMap(priceMap, startDate, endDate) {
+  if (!(priceMap instanceof Map)) {
+    return;
+  }
+
+  let cursor = parseYmdDate(startDate);
+  const end = parseYmdDate(endDate);
+  if (!(cursor instanceof Date) || !(end instanceof Date)) {
+    return;
+  }
+
+  while (cursor.getTime() <= end.getTime()) {
+    priceMap.delete(formatDateToYmd(cursor));
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+  }
+}
+
+function resolveBookingCalendarRange(calendar) {
+  if (!calendar) {
+    return null;
+  }
+
+  const currentDate = calendar.currentDate instanceof Date
+    ? new Date(calendar.currentDate)
+    : new Date();
+  if (!(currentDate instanceof Date) || Number.isNaN(currentDate.getTime())) {
+    return null;
+  }
+
+  const monthsToShow = (() => {
+    if (typeof calendar.getPopupMonthsToShow === 'function') {
+      const value = Number(calendar.getPopupMonthsToShow());
+      if (Number.isFinite(value) && value >= 1) {
+        return Math.max(1, Math.min(6, Math.round(value)));
+      }
+    }
+
+    const optionValue = Number(calendar.options?.monthsToShow ?? 1);
+    if (!Number.isFinite(optionValue)) {
+      return 1;
+    }
+
+    return Math.max(1, Math.min(6, Math.round(optionValue)));
+  })();
+
+  const monthStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  const monthEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + monthsToShow, 0);
+
+  return {
+    monthStart: formatDateToYmd(monthStartDate),
+    monthEnd: formatDateToYmd(monthEndDate),
+  };
+}
+
+function setBookingStatus(state, labelKey, type, customMessage = '') {
+  if (!state || !(state.statusNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const message = customMessage || state.labels?.[labelKey] || '';
+  state.statusNode.textContent = message;
+  state.statusNode.dataset.state = type || 'idle';
+
+  if (state.calendar && typeof state.calendar.setAvailabilityMessage === 'function') {
+    if (!message || type === 'idle') {
+      state.calendar.setAvailabilityMessage('', null);
+      return;
+    }
+
+    if (type === 'loading') {
+      state.calendar.setAvailabilityMessage(message, 'loading');
+      return;
+    }
+
+    if (type === 'success') {
+      state.calendar.setAvailabilityMessage(message, 'success');
+      return;
+    }
+
+    state.calendar.setAvailabilityMessage(message, 'error');
+  }
+}
+
+function renderBookingTotals(state, totals) {
+  if (
+    !state
+    || !(state.summaryNode instanceof HTMLElement)
+    || !(state.dailyValueNode instanceof HTMLElement)
+    || !(state.subtotalValueNode instanceof HTMLElement)
+    || !(state.taxValueNode instanceof HTMLElement)
+    || !(state.totalValueNode instanceof HTMLElement)
+  ) {
+    return;
+  }
+
+  if (!isPlainObject(totals)) {
+    state.summaryNode.hidden = true;
+    state.dailyValueNode.textContent = '';
+    state.subtotalValueNode.textContent = '';
+    state.taxValueNode.textContent = '';
+    state.totalValueNode.textContent = '';
+    return;
+  }
+
+  const dailyPrice = Number(totals.daily_price);
+  const subtotal = Number(totals.subtotal);
+  const taxTotal = Number(totals.tax_total);
+  const grandTotal = Number(totals.grand_total);
+
+  if (
+    !Number.isFinite(dailyPrice)
+    || !Number.isFinite(subtotal)
+    || !Number.isFinite(taxTotal)
+    || !Number.isFinite(grandTotal)
+  ) {
+    state.summaryNode.hidden = true;
+    state.dailyValueNode.textContent = '';
+    state.subtotalValueNode.textContent = '';
+    state.taxValueNode.textContent = '';
+    state.totalValueNode.textContent = '';
+    return;
+  }
+
+  state.summaryNode.hidden = false;
+  state.dailyValueNode.textContent = formatBookingCurrency(dailyPrice, state.currency);
+  state.subtotalValueNode.textContent = formatBookingCurrency(subtotal, state.currency);
+  state.taxValueNode.textContent = formatBookingCurrency(taxTotal, state.currency);
+  state.totalValueNode.textContent = formatBookingCurrency(grandTotal, state.currency);
+}
+
+function formatBookingCurrency(value, currency) {
+  const normalizedCurrency = sanitizeBookingCurrency(currency);
+  const formattedValue = Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return `${normalizedCurrency}${formattedValue}`;
+}
+
+function formatBookingCalendarPrice(value, currency) {
+  const normalizedCurrency = sanitizeBookingCurrency(currency);
+  const roundedValue = Number.isFinite(Number(value)) ? Math.round(Number(value)) : 0;
+  const formattedValue = roundedValue.toLocaleString(undefined, {
+    maximumFractionDigits: 0,
+  });
+
+  return `${normalizedCurrency}${formattedValue}`;
+}
+
+function sanitizeBookingPropertyId(value) {
+  return typeof value === 'string' || typeof value === 'number'
+    ? String(value).trim()
+    : '';
+}
+
+function sanitizeBookingCurrency(value) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized || '$';
+}
+
+function sanitizeBookingReztypeid(value, fallback = 26) {
+  const normalized = Number(value);
+  return Number.isFinite(normalized) && normalized > 0 ? Math.floor(normalized) : fallback;
+}
+
+function sanitizeBookingText(value, fallback = '') {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const normalized = value.trim();
+  return normalized || fallback;
+}
+
+function sanitizeBookingGuestOptions(value) {
+  const options = Array.isArray(value) ? value : ['1', '2', '3', '4', '5', '6', '7', '8+'];
+  const normalized = options
+    .map((optionValue) => String(optionValue ?? '').trim())
+    .filter(Boolean);
+
+  return normalized.length > 0 ? Array.from(new Set(normalized)) : ['1', '2', '3', '4', '5', '6', '7', '8+'];
+}
+
+function resolveInitialGuestValue(options, preferred) {
+  const normalizedPreferred = String(preferred ?? '').trim();
+  if (normalizedPreferred && options.includes(normalizedPreferred)) {
+    return normalizedPreferred;
+  }
+
+  return options[0] || '1';
+}
+
+function sanitizeBookingCalendarOptions(calendarOptions) {
+  const options = isPlainObject(calendarOptions) ? calendarOptions : {};
+  const monthsToShow = Number(options.monthsToShow);
+  const defaultMinDays = Number(options.defaultMinDays);
+
+  return {
+    monthsToShow: Number.isFinite(monthsToShow) ? Math.max(1, Math.min(6, Math.round(monthsToShow))) : 2,
+    datepickerPlacement: options.datepickerPlacement === 'default' ? 'default' : 'auto',
+    defaultMinDays: Number.isFinite(defaultMinDays) ? Math.max(1, Math.round(defaultMinDays)) : 1,
+    tooltipLabel: sanitizeBookingText(options.tooltipLabel, 'Nights'),
+    showTooltip: options.showTooltip !== false,
+    showClearButton: options.showClearButton !== false,
+  };
+}
+
+function buildBookingLabels(inputLabels) {
+  const labels = isPlainObject(inputLabels) ? inputLabels : {};
+  return {
+    title: sanitizeBookingText(labels.title, 'Book This Property'),
+    dates: sanitizeBookingText(labels.dates, 'Dates'),
+    checking: sanitizeBookingText(labels.checking, 'Checking live availability...'),
+    available: sanitizeBookingText(labels.available, 'Selected dates are available.'),
+    unavailable: sanitizeBookingText(labels.unavailable, 'Selected dates are unavailable.'),
+    error: sanitizeBookingText(labels.error, 'Live availability check failed. Please try again.'),
+    idle: sanitizeBookingText(labels.idle, 'Select dates and guests to check availability.'),
+    daily: sanitizeBookingText(labels.daily, 'Rent'),
+    subtotal: sanitizeBookingText(labels.subtotal, 'Subtotal'),
+    tax: sanitizeBookingText(labels.tax, 'Tax'),
+    total: sanitizeBookingText(labels.total, 'Total'),
+    missingContext: sanitizeBookingText(labels.missingContext, 'Property context is required to load the booking widget.'),
+  };
+}
+
+function normalizeGuestCount(value) {
+  const rawValue = String(value ?? '').trim();
+  const match = rawValue.match(/\d+/);
+  if (!match) {
+    return 1;
+  }
+
+  const numeric = Number(match[0]);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 1;
+  }
+
+  return Math.min(99, Math.round(numeric));
+}
+
+function parseYmdDate(value) {
+  if (!isValidDateString(value)) {
+    return null;
+  }
+
+  const [year, month, day] = value.split('-').map((part) => Number(part));
+  const date = new Date(year, month - 1, day);
+  if (
+    !Number.isFinite(date.getTime())
+    || date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatDateToYmd(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function buildBookingCalendarUrl() {
+  const bootstrap = typeof window !== 'undefined' && isPlainObject(window.BarefootEnginePublic)
+    ? window.BarefootEnginePublic
+    : {};
+  const restBase = typeof bootstrap.restBase === 'string' ? bootstrap.restBase : '';
+  const endpoint = typeof bootstrap.bookingCalendarEndpoint === 'string'
+    ? bootstrap.bookingCalendarEndpoint
+    : 'booking/calendar';
+
+  if (!restBase) {
+    return '';
+  }
+
+  return new URL(endpoint, restBase).toString();
+}
+
+function buildBookingQuoteUrl() {
+  const bootstrap = typeof window !== 'undefined' && isPlainObject(window.BarefootEnginePublic)
+    ? window.BarefootEnginePublic
+    : {};
+  const restBase = typeof bootstrap.restBase === 'string' ? bootstrap.restBase : '';
+  const endpoint = typeof bootstrap.bookingQuoteEndpoint === 'string'
+    ? bootstrap.bookingQuoteEndpoint
+    : 'booking/quote';
+
+  if (!restBase) {
+    return '';
+  }
+
+  return new URL(endpoint, restBase).toString();
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener(
     'DOMContentLoaded',
     () => {
       bootSearchWidgets();
       bootListingsWidgets();
+      bootPricingTables();
+      bootBookingWidgets();
     },
     { once: true },
   );
 } else {
   bootSearchWidgets();
   bootListingsWidgets();
+  bootPricingTables();
+  bootBookingWidgets();
 }

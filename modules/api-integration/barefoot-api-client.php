@@ -163,6 +163,173 @@ class Barefoot_Api_Client
      * @param array<string, array<string, string>> $settings
      * @return string|WP_Error
      */
+    public function fetch_property_booking_date_xml(
+        array $settings,
+        string $property_id,
+        string $date1,
+        string $date2
+    ): string|WP_Error {
+        $normalized_property_id = trim($property_id);
+        $normalized_date1 = trim($date1);
+        $normalized_date2 = trim($date2);
+
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required to fetch blocked booking dates.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        if ($normalized_date1 === '' || $normalized_date2 === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_booking_window',
+                __('A valid booking date window is required to fetch blocked booking dates.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_document_method(
+            'GetPropertyBookingDate',
+            $settings,
+            [
+                'propertyId' => $normalized_property_id,
+                'date1' => $normalized_date1,
+                'date2' => $normalized_date2,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return bool|WP_Error
+     */
+    public function is_property_availability(
+        array $settings,
+        string $property_id,
+        string $date1,
+        string $date2
+    ): bool|WP_Error {
+        $normalized_property_id = trim($property_id);
+        $normalized_date1 = trim($date1);
+        $normalized_date2 = trim($date2);
+
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required to check availability.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        if ($normalized_date1 === '' || $normalized_date2 === '') {
+            return new WP_Error(
+                'barefoot_engine_availability_missing_dates',
+                __('A valid date range is required to check availability.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        $response = $this->request_method(
+            'IsPropertyAvailability',
+            $settings,
+            [
+                'propertyId' => $normalized_property_id,
+                'date1' => $normalized_date1,
+                'date2' => $normalized_date2,
+            ]
+        );
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $body = isset($response['body']) && is_string($response['body']) ? trim($response['body']) : '';
+        if ($body === '') {
+            return new WP_Error(
+                'barefoot_engine_api_empty_response',
+                __('Barefoot returned an empty response while checking availability.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $parsed = $this->parse_boolean_response($body);
+        if ($parsed === null) {
+            return new WP_Error(
+                'barefoot_engine_api_invalid_response',
+                __('Barefoot returned an invalid availability response.', 'barefoot-engine'),
+                [
+                    'status' => 502,
+                    'details' => $this->summarize_remote_error($body),
+                ]
+            );
+        }
+
+        return $parsed;
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
+    public function fetch_quote_rates_detail_string(
+        array $settings,
+        string $property_id,
+        string $arrival_date,
+        string $departure_date,
+        int $num_adult,
+        int $num_pet,
+        int $num_baby,
+        int $num_child,
+        int $reztypeid
+    ): string|WP_Error {
+        $normalized_property_id = trim($property_id);
+        $normalized_arrival_date = trim($arrival_date);
+        $normalized_departure_date = trim($departure_date);
+
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required to fetch quote rates.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        if ($normalized_arrival_date === '' || $normalized_departure_date === '') {
+            return new WP_Error(
+                'barefoot_engine_quote_missing_dates',
+                __('A valid quote date range is required.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        if ($reztypeid <= 0) {
+            return new WP_Error(
+                'barefoot_engine_quote_missing_reztypeid',
+                __('A valid reservation type ID is required to fetch quote rates.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_string_method(
+            'GetQuoteRatesDetail',
+            $settings,
+            [
+                'propertyId' => $normalized_property_id,
+                'strADate' => $normalized_arrival_date,
+                'strDDate' => $normalized_departure_date,
+                'num_adult' => (string) max(0, $num_adult),
+                'num_pet' => (string) max(0, $num_pet),
+                'num_baby' => (string) max(0, $num_baby),
+                'num_child' => (string) max(0, $num_child),
+                'reztypeid' => (string) $reztypeid,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
     public function fetch_property_availability_by_date_xml(
         array $settings,
         string $date1,
@@ -421,6 +588,39 @@ class Barefoot_Api_Client
         }
 
         return $trimmed;
+    }
+
+    private function parse_boolean_response(string $body): ?bool
+    {
+        $trimmed = trim($body);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $document = $this->load_document($trimmed);
+        if ($document === null || !$document->documentElement instanceof \DOMElement) {
+            $normalized = strtolower($trimmed);
+            if (str_contains($normalized, 'true')) {
+                return true;
+            }
+
+            if (str_contains($normalized, 'false')) {
+                return false;
+            }
+
+            return null;
+        }
+
+        $value = strtolower(trim($document->documentElement->textContent));
+        if ($value === 'true') {
+            return true;
+        }
+
+        if ($value === 'false') {
+            return false;
+        }
+
+        return null;
     }
 
     /**
