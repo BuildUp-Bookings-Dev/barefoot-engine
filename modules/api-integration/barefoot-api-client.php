@@ -330,6 +330,114 @@ class Barefoot_Api_Client
      * @param array<string, array<string, string>> $settings
      * @return string|WP_Error
      */
+    public function create_quote_and_get_payment_schedule_string(
+        array $settings,
+        string $property_id,
+        string $arrival_date,
+        string $departure_date,
+        int $num_adult,
+        int $num_pet,
+        int $num_baby,
+        int $num_child,
+        int $reztypeid
+    ): string|WP_Error {
+        $normalized_property_id = trim($property_id);
+        $normalized_arrival_date = trim($arrival_date);
+        $normalized_departure_date = trim($departure_date);
+
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_property_missing_id',
+                __('A Barefoot Property ID is required to create a checkout quote.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        if ($normalized_arrival_date === '' || $normalized_departure_date === '') {
+            return new WP_Error(
+                'barefoot_engine_quote_missing_dates',
+                __('A valid quote date range is required.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        if ($reztypeid <= 0) {
+            return new WP_Error(
+                'barefoot_engine_quote_missing_reztypeid',
+                __('A valid reservation type ID is required to create a checkout quote.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_xml_string_method(
+            'CreateQuoteAndGetPaymentSchedule',
+            $settings,
+            [
+                'propertyId' => $normalized_property_id,
+                'strADate' => $normalized_arrival_date,
+                'strDDate' => $normalized_departure_date,
+                'num_adult' => (string) max(0, $num_adult),
+                'num_pet' => (string) max(0, $num_pet),
+                'num_baby' => (string) max(0, $num_baby),
+                'num_child' => (string) max(0, $num_child),
+                'reztypeid' => (string) $reztypeid,
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @param array<int, string> $info
+     * @return string|WP_Error
+     */
+    public function set_consumer_info(array $settings, array $info): string|WP_Error
+    {
+        if ($info === []) {
+            return new WP_Error(
+                'barefoot_engine_checkout_missing_guest_info',
+                __('Guest information is required to create a checkout session.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_scalar_method(
+            'SetConsumerInfo',
+            $settings,
+            [
+                'Info' => array_values($info),
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @param array<int, string> $info
+     * @return string|WP_Error
+     */
+    public function property_booking_new(array $settings, array $info, string $portal_id = ''): string|WP_Error
+    {
+        if ($info === []) {
+            return new WP_Error(
+                'barefoot_engine_checkout_missing_payment_info',
+                __('Payment information is required to complete checkout.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->request_scalar_method(
+            'PropertyBookingNew',
+            $settings,
+            [
+                'Info' => array_values($info),
+                'portalid' => trim($portal_id),
+            ]
+        );
+    }
+
+    /**
+     * @param array<string, array<string, string>> $settings
+     * @return string|WP_Error
+     */
     public function fetch_property_availability_by_date_xml(
         array $settings,
         string $date1,
@@ -438,7 +546,7 @@ class Barefoot_Api_Client
 
     /**
      * @param array<string, array<string, string>> $settings
-     * @param array<string, string> $extra_params
+     * @param array<string, mixed> $extra_params
      * @return string|WP_Error
      */
     private function request_xml_string_method(string $method, array $settings, array $extra_params = []): string|WP_Error
@@ -474,7 +582,7 @@ class Barefoot_Api_Client
 
     /**
      * @param array<string, array<string, string>> $settings
-     * @param array<string, string> $extra_params
+     * @param array<string, mixed> $extra_params
      * @return string|WP_Error
      */
     private function request_xml_document_method(string $method, array $settings, array $extra_params = []): string|WP_Error
@@ -510,8 +618,43 @@ class Barefoot_Api_Client
     }
 
     /**
+     * @param array<string, mixed> $extra_params
+     * @return string|WP_Error
+     */
+    private function request_scalar_method(string $method, array $settings, array $extra_params = []): string|WP_Error
+    {
+        $response = $this->request_method($method, $settings, $extra_params);
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $body = isset($response['body']) && is_string($response['body']) ? trim($response['body']) : '';
+        if ($body === '') {
+            return new WP_Error(
+                'barefoot_engine_api_empty_response',
+                __('Barefoot returned an empty response.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $value = $this->extract_scalar_text($body);
+        if ($value === '') {
+            return new WP_Error(
+                'barefoot_engine_api_invalid_response',
+                __('Barefoot returned an invalid scalar payload.', 'barefoot-engine'),
+                [
+                    'status' => 502,
+                    'details' => $this->summarize_remote_error($body),
+                ]
+            );
+        }
+
+        return $value;
+    }
+
+    /**
      * @param array<string, array<string, string>> $settings
-     * @param array<string, string> $extra_params
+     * @param array<string, mixed> $extra_params
      * @return array<string, mixed>|WP_Error
      */
     private function request_method(string $method, array $settings, array $extra_params = []): array|WP_Error
@@ -524,7 +667,7 @@ class Barefoot_Api_Client
                 'headers' => [
                     'Content-Type' => 'application/x-www-form-urlencoded; charset=utf-8',
                 ],
-                'body' => array_merge($credentials, $extra_params),
+                'body' => $this->build_request_body(array_merge($credentials, $extra_params)),
             ]
         );
 
@@ -551,6 +694,41 @@ class Barefoot_Api_Client
             'status_code' => $status_code,
             'body' => $body,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function build_request_body(array $params): string
+    {
+        $segments = [];
+
+        foreach ($params as $key => $value) {
+            $normalized_key = (string) $key;
+            if ($normalized_key === '') {
+                continue;
+            }
+
+            if (is_array($value)) {
+                foreach ($value as $item) {
+                    if (!is_scalar($item) && $item !== null) {
+                        continue;
+                    }
+
+                    $segments[] = rawurlencode($normalized_key) . '=' . rawurlencode($this->normalize_request_value($item));
+                }
+
+                continue;
+            }
+
+            if (!is_scalar($value) && $value !== null) {
+                continue;
+            }
+
+            $segments[] = rawurlencode($normalized_key) . '=' . rawurlencode($this->normalize_request_value($value));
+        }
+
+        return implode('&', $segments);
     }
 
     /**
@@ -588,6 +766,21 @@ class Barefoot_Api_Client
         }
 
         return $trimmed;
+    }
+
+    private function extract_scalar_text(string $body): string
+    {
+        $trimmed = trim($body);
+        if ($trimmed === '') {
+            return '';
+        }
+
+        $document = $this->load_document($trimmed);
+        if ($document === null || !$document->documentElement instanceof \DOMElement) {
+            return trim(html_entity_decode(wp_strip_all_tags($trimmed), ENT_QUOTES | ENT_XML1, 'UTF-8'));
+        }
+
+        return trim(html_entity_decode($document->documentElement->textContent, ENT_QUOTES | ENT_XML1, 'UTF-8'));
     }
 
     private function parse_boolean_response(string $body): ?bool
@@ -766,5 +959,21 @@ class Barefoot_Api_Client
         }
 
         return trim(wp_html_excerpt($normalized, 220, '...'));
+    }
+
+    /**
+     * @param scalar|null $value
+     */
+    private function normalize_request_value($value): string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        return (string) $value;
     }
 }

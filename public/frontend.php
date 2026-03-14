@@ -60,6 +60,9 @@ class Frontend
                 'availabilityPreflightEndpoint' => 'availability/preflight',
                 'bookingCalendarEndpoint' => 'booking/calendar',
                 'bookingQuoteEndpoint' => 'booking/quote',
+                'bookingCheckoutStartEndpoint' => 'booking-checkout/start',
+                'bookingCheckoutSessionEndpoint' => 'booking-checkout/session',
+                'bookingCheckoutCompleteEndpoint' => 'booking-checkout/complete',
             ]
         );
     }

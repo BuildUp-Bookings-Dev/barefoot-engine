@@ -1,5 +1,6 @@
 import { BPCalendar, BP_Calendar } from '@braudypedrosa/bp-calendar';
 import listingsMapModule from './bp-listings-runtime.js';
+import { bootBookingCheckoutWidgets } from './booking-checkout.js';
 import { BPSearchWidget, BP_SearchWidget } from '@braudypedrosa/bp-search-widget';
 
 const SEARCH_WIDGET_SELECTOR = '[data-be-search-widget]';
@@ -10,6 +11,7 @@ const ListingsMap = listingsMapModule?.ListingsMap ?? listingsMapModule ?? null;
 const AJAX_SEARCH_MIN_BUFFER_MS = 1500;
 const CHOICE_POPOVER_SCROLLBAR_MIN_THUMB = 44;
 const BOOKING_QUOTE_DEBOUNCE_MS = 350;
+const BOOKING_SESSION_COOKIE = 'be_booking_checkout_session';
 const choicePopoverScrollbarStates = new WeakMap();
 
 if (typeof window !== 'undefined') {
@@ -1840,6 +1842,7 @@ function initializeBookingWidget(mountNode, config) {
   const guestsSelect = mountNode.querySelector('.barefoot-engine-booking-widget__guests-select');
   const statusNode = mountNode.querySelector('.barefoot-engine-booking-widget__status');
   const summaryNode = mountNode.querySelector('.barefoot-engine-booking-widget__summary');
+  const bookNowButton = mountNode.querySelector('[data-be-booking-action="book-now"]');
   const dailyValueNode = mountNode.querySelector('[data-be-booking-total="daily"]');
   const subtotalValueNode = mountNode.querySelector('[data-be-booking-total="subtotal"]');
   const taxValueNode = mountNode.querySelector('[data-be-booking-total="tax"]');
@@ -1850,6 +1853,7 @@ function initializeBookingWidget(mountNode, config) {
     || !(guestsSelect instanceof HTMLSelectElement)
     || !(statusNode instanceof HTMLElement)
     || !(summaryNode instanceof HTMLElement)
+    || !(bookNowButton instanceof HTMLButtonElement)
     || !(dailyValueNode instanceof HTMLElement)
     || !(subtotalValueNode instanceof HTMLElement)
     || !(taxValueNode instanceof HTMLElement)
@@ -1869,6 +1873,7 @@ function initializeBookingWidget(mountNode, config) {
 
   const state = {
     propertyId: runtime.propertyId,
+    redirectUrl: runtime.redirectUrl,
     currency: runtime.currency,
     reztypeid: runtime.reztypeid,
     labels: runtime.labels,
@@ -1876,6 +1881,7 @@ function initializeBookingWidget(mountNode, config) {
     calendar: null,
     statusNode,
     summaryNode,
+    bookNowButton,
     dailyValueNode,
     subtotalValueNode,
     taxValueNode,
@@ -1889,13 +1895,16 @@ function initializeBookingWidget(mountNode, config) {
     checkOut: '',
     quoteTimer: null,
     quoteRequestToken: 0,
+    bookNowRequestInFlight: false,
   };
 
   mountNode.beBookingWidgetState = state;
   mountNode.classList.toggle('be-booking-missing-context', runtime.missingContext);
+  state.bookNowButton.disabled = true;
 
   if (runtime.missingContext) {
     guestsSelect.disabled = true;
+    state.bookNowButton.disabled = true;
     setBookingStatus(state, 'missingContext', 'error');
     renderBookingTotals(state, null);
     return;
@@ -1919,6 +1928,7 @@ function initializeBookingWidget(mountNode, config) {
   patchCalendarPopupRender(state);
 
   guestsSelect.addEventListener('change', () => {
+    state.bookNowButton.disabled = true;
     if (!state.checkIn || !state.checkOut) {
       setBookingStatus(state, 'idle', 'idle');
       return;
@@ -1930,12 +1940,18 @@ function initializeBookingWidget(mountNode, config) {
   setBookingStatus(state, 'idle', 'idle');
   renderBookingTotals(state, null);
   refreshBookingCalendarAvailability(state, true);
+
+  bookNowButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    startBookingSessionAndNavigate(state);
+  });
 }
 
 function buildBookingRuntime(config) {
   const propertyId = sanitizeBookingPropertyId(config?.propertyId);
   const missingContext = !propertyId || Boolean(config?.missingContext);
   const currency = sanitizeBookingCurrency(config?.currency);
+  const redirectUrl = sanitizeBookingRedirectUrl(config?.redirectUrl);
   const reztypeid = sanitizeBookingReztypeid(config?.reztypeid, 26);
   const calendarOptions = sanitizeBookingCalendarOptions(config?.calendarOptions);
   const labels = buildBookingLabels(config?.labels);
@@ -1950,6 +1966,7 @@ function buildBookingRuntime(config) {
     propertyId,
     missingContext,
     currency,
+    redirectUrl,
     reztypeid,
     calendarOptions,
     labels,
@@ -1989,6 +2006,7 @@ function buildBookingRuntime(config) {
             <strong data-be-booking-total="grand"></strong>
           </div>
         </div>
+        <button type="button" class="barefoot-engine-booking-widget__book-now" data-be-booking-action="book-now" disabled>${escapeHtml(labels.bookNow)}</button>
       </section>
     `,
   };
@@ -2018,11 +2036,13 @@ function handleBookingRangeSelect(state, range) {
   state.checkOut = end;
 
   if (!start || !end) {
+    state.bookNowButton.disabled = true;
     renderBookingTotals(state, null);
     setBookingStatus(state, 'idle', 'idle');
     return;
   }
 
+  state.bookNowButton.disabled = true;
   scheduleBookingQuoteCheck(state);
 }
 
@@ -2055,6 +2075,7 @@ function runBookingQuoteCheck(state) {
   const requestToken = Number(state.quoteRequestToken || 0) + 1;
   state.quoteRequestToken = requestToken;
   setBookingStatus(state, 'checking', 'loading');
+  state.bookNowButton.disabled = true;
   renderBookingTotals(state, null);
 
   fetch(quoteUrl, {
@@ -2089,6 +2110,7 @@ function runBookingQuoteCheck(state) {
 
       const payload = isPlainObject(response?.data) ? response.data : {};
       if (payload.available !== true) {
+        state.bookNowButton.disabled = true;
         setBookingStatus(state, 'unavailable', 'error');
         renderBookingTotals(state, null);
         return;
@@ -2096,6 +2118,7 @@ function runBookingQuoteCheck(state) {
 
       setBookingStatus(state, 'available', 'success');
       renderBookingTotals(state, payload.totals);
+      state.bookNowButton.disabled = !canNavigateBookingNow(state);
     })
     .catch((error) => {
       if (Number(state.quoteRequestToken) !== requestToken) {
@@ -2103,6 +2126,7 @@ function runBookingQuoteCheck(state) {
       }
 
       console.warn('[barefoot-engine] Booking quote check failed.', error);
+      state.bookNowButton.disabled = true;
       setBookingStatus(state, 'error', 'error');
       renderBookingTotals(state, null);
     });
@@ -2377,6 +2401,7 @@ function renderBookingTotals(state, totals) {
   if (
     !state
     || !(state.summaryNode instanceof HTMLElement)
+    || !(state.bookNowButton instanceof HTMLButtonElement)
     || !(state.dailyValueNode instanceof HTMLElement)
     || !(state.subtotalValueNode instanceof HTMLElement)
     || !(state.taxValueNode instanceof HTMLElement)
@@ -2387,6 +2412,7 @@ function renderBookingTotals(state, totals) {
 
   if (!isPlainObject(totals)) {
     state.summaryNode.hidden = true;
+    state.bookNowButton.disabled = true;
     state.dailyValueNode.textContent = '';
     state.subtotalValueNode.textContent = '';
     state.taxValueNode.textContent = '';
@@ -2406,6 +2432,7 @@ function renderBookingTotals(state, totals) {
     || !Number.isFinite(grandTotal)
   ) {
     state.summaryNode.hidden = true;
+    state.bookNowButton.disabled = true;
     state.dailyValueNode.textContent = '';
     state.subtotalValueNode.textContent = '';
     state.taxValueNode.textContent = '';
@@ -2418,6 +2445,7 @@ function renderBookingTotals(state, totals) {
   state.subtotalValueNode.textContent = formatBookingCurrency(subtotal, state.currency);
   state.taxValueNode.textContent = formatBookingCurrency(taxTotal, state.currency);
   state.totalValueNode.textContent = formatBookingCurrency(grandTotal, state.currency);
+  state.bookNowButton.disabled = !canNavigateBookingNow(state);
 }
 
 function formatBookingCurrency(value, currency) {
@@ -2449,6 +2477,11 @@ function sanitizeBookingPropertyId(value) {
 function sanitizeBookingCurrency(value) {
   const normalized = typeof value === 'string' ? value.trim() : '';
   return normalized || '$';
+}
+
+function sanitizeBookingRedirectUrl(value) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized || '/booking-confirmation';
 }
 
 function sanitizeBookingReztypeid(value, fallback = 26) {
@@ -2512,6 +2545,7 @@ function buildBookingLabels(inputLabels) {
     subtotal: sanitizeBookingText(labels.subtotal, 'Subtotal'),
     tax: sanitizeBookingText(labels.tax, 'Tax'),
     total: sanitizeBookingText(labels.total, 'Total'),
+    bookNow: sanitizeBookingText(labels.bookNow, 'BOOK NOW'),
     missingContext: sanitizeBookingText(labels.missingContext, 'Property context is required to load the booking widget.'),
   };
 }
@@ -2589,6 +2623,165 @@ function buildBookingQuoteUrl() {
   return new URL(endpoint, restBase).toString();
 }
 
+function buildCheckoutStartUrl() {
+  const bootstrap = typeof window !== 'undefined' && isPlainObject(window.BarefootEnginePublic)
+    ? window.BarefootEnginePublic
+    : {};
+  const restBase = typeof bootstrap.restBase === 'string' ? bootstrap.restBase : '';
+  const endpoint = typeof bootstrap.bookingCheckoutStartEndpoint === 'string'
+    ? bootstrap.bookingCheckoutStartEndpoint
+    : 'booking-checkout/start';
+
+  if (!restBase) {
+    return '';
+  }
+
+  return new URL(endpoint, restBase).toString();
+}
+
+function canNavigateBookingNow(state) {
+  if (!state) {
+    return false;
+  }
+
+  return Boolean(
+    sanitizeBookingPropertyId(state.propertyId)
+    && isValidDateString(state.checkIn)
+    && isValidDateString(state.checkOut)
+  );
+}
+
+async function startBookingSessionAndNavigate(state) {
+  if (!canNavigateBookingNow(state)) {
+    return;
+  }
+
+  if (state.bookNowRequestInFlight === true) {
+    return;
+  }
+
+  const startUrl = buildCheckoutStartUrl();
+  const fallbackRedirectUrl = buildBookingRedirectUrl(state);
+  if (!fallbackRedirectUrl) {
+    return;
+  }
+
+  if (!startUrl) {
+    writeBookingSessionCookie('');
+    window.location.assign(fallbackRedirectUrl);
+    return;
+  }
+
+  state.bookNowRequestInFlight = true;
+  state.bookNowButton.disabled = true;
+  setBookingStatus(state, 'checking', 'loading', 'Preparing checkout...');
+
+  try {
+    const response = await fetch(startUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        property_id: sanitizeBookingPropertyId(state.propertyId),
+        check_in: state.checkIn,
+        check_out: state.checkOut,
+        guests: normalizeGuestCount(state.guestsSelect?.value),
+        reztypeid: sanitizeBookingReztypeid(state.reztypeid, 26),
+        redirect_url: sanitizeBookingRedirectUrl(state.redirectUrl),
+        existing_session_token: readBookingSessionCookie(),
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = typeof data?.message === 'string' && data.message.trim() !== ''
+        ? data.message
+        : state.labels.error;
+      throw new Error(message);
+    }
+
+    const payload = isPlainObject(data?.data) ? data.data : {};
+    const sessionToken = sanitizeBookingText(payload.sessionToken, '');
+    if (!sessionToken) {
+      throw new Error('Checkout session could not be created.');
+    }
+
+    writeBookingSessionCookie(sessionToken);
+    const redirectTarget = sanitizeBookingText(payload.redirectUrl, fallbackRedirectUrl);
+    window.location.assign(redirectTarget || fallbackRedirectUrl);
+  } catch (error) {
+    console.warn('[barefoot-engine] Booking start session failed.', error);
+    state.bookNowRequestInFlight = false;
+    state.bookNowButton.disabled = !canNavigateBookingNow(state);
+    setBookingStatus(
+      state,
+      'error',
+      'error',
+      error instanceof Error && error.message ? error.message : state.labels.error,
+    );
+  }
+}
+
+function buildBookingRedirectUrl(state) {
+  if (!state || !canNavigateBookingNow(state)) {
+    return '';
+  }
+
+  let url;
+  try {
+    url = new URL(sanitizeBookingRedirectUrl(state.redirectUrl), window.location.origin);
+  } catch (error) {
+    console.warn('[barefoot-engine] Invalid booking redirect URL.', error);
+    return '';
+  }
+
+  const params = new URLSearchParams(url.search);
+  params.set('property_id', sanitizeBookingPropertyId(state.propertyId));
+  params.set('check_in', state.checkIn);
+  params.set('check_out', state.checkOut);
+  params.set('guests', String(normalizeGuestCount(state.guestsSelect?.value)));
+  params.set('reztypeid', String(sanitizeBookingReztypeid(state.reztypeid, 26)));
+  url.search = params.toString();
+
+  return url.toString();
+}
+
+function readBookingSessionCookie() {
+  if (typeof document === 'undefined') {
+    return '';
+  }
+
+  const encodedName = `${encodeURIComponent(BOOKING_SESSION_COOKIE)}=`;
+  const chunks = document.cookie ? document.cookie.split(';') : [];
+
+  for (const chunk of chunks) {
+    const normalized = chunk.trim();
+    if (!normalized.startsWith(encodedName)) {
+      continue;
+    }
+
+    const value = normalized.slice(encodedName.length);
+    return sanitizeBookingText(decodeURIComponent(value), '');
+  }
+
+  return '';
+}
+
+function writeBookingSessionCookie(sessionToken) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const normalizedToken = sanitizeBookingText(sessionToken, '');
+  if (!normalizedToken) {
+    document.cookie = `${encodeURIComponent(BOOKING_SESSION_COOKIE)}=; path=/; Max-Age=0; SameSite=Lax`;
+    return;
+  }
+
+  document.cookie = `${encodeURIComponent(BOOKING_SESSION_COOKIE)}=${encodeURIComponent(normalizedToken)}; path=/; SameSite=Lax`;
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -2606,6 +2799,7 @@ if (document.readyState === 'loading') {
       bootListingsWidgets();
       bootPricingTables();
       bootBookingWidgets();
+      bootBookingCheckoutWidgets();
     },
     { once: true },
   );
@@ -2614,4 +2808,5 @@ if (document.readyState === 'loading') {
   bootListingsWidgets();
   bootPricingTables();
   bootBookingWidgets();
+  bootBookingCheckoutWidgets();
 }

@@ -1,16 +1,17 @@
 <?php
 
-namespace BarefootEngine\Widgets\Booking;
+namespace BarefootEngine\Widgets\BookingCheckout;
 
+use BarefootEngine\Properties\Property_Booking_Checkout_Service;
 use BarefootEngine\Properties\Property_Post_Type;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-class Booking_Widget_Shortcode
+class Booking_Checkout_Shortcode
 {
-    public const SHORTCODE_TAG = 'barefoot_booking_widget';
+    public const SHORTCODE_TAG = 'barefoot_booking_checkout';
 
     /**
      * @var array<string, mixed>
@@ -18,19 +19,20 @@ class Booking_Widget_Shortcode
     private const DEFAULTS = [
         'widget_id' => 'default',
         'property_id' => '',
-        'redirect_url' => '',
         'currency' => '',
         'reztypeid' => '',
-        'months_to_show' => '',
-        'default_min_days' => '',
         'class' => '',
     ];
 
-    private Booking_Widget_Preset_Registry $preset_registry;
+    private Booking_Checkout_Preset_Registry $preset_registry;
+    private Property_Booking_Checkout_Service $checkout_service;
 
-    public function __construct(?Booking_Widget_Preset_Registry $preset_registry = null)
-    {
-        $this->preset_registry = $preset_registry ?? new Booking_Widget_Preset_Registry();
+    public function __construct(
+        ?Booking_Checkout_Preset_Registry $preset_registry = null,
+        ?Property_Booking_Checkout_Service $checkout_service = null
+    ) {
+        $this->preset_registry = $preset_registry ?? new Booking_Checkout_Preset_Registry();
+        $this->checkout_service = $checkout_service ?? new Property_Booking_Checkout_Service();
     }
 
     public function register(): void
@@ -45,9 +47,9 @@ class Booking_Widget_Shortcode
     {
         $raw_attributes = is_array($atts) ? $atts : [];
         $attributes = shortcode_atts(self::DEFAULTS, $atts, self::SHORTCODE_TAG);
-        $instance_id = wp_unique_id('be-booking-widget-');
+        $instance_id = wp_unique_id('be-booking-checkout-');
         $config_id = $instance_id . '-config';
-        $wrapper_classes = ['barefoot-engine-booking-widget', 'barefoot-engine-public'];
+        $wrapper_classes = ['barefoot-engine-booking-checkout', 'barefoot-engine-public'];
         $widget_id = isset($attributes['widget_id']) ? (string) $attributes['widget_id'] : 'default';
         $attribute_property_id = isset($attributes['property_id']) ? trim((string) $attributes['property_id']) : '';
 
@@ -66,6 +68,13 @@ class Booking_Widget_Shortcode
 
         if ($resolved_property_id === '') {
             $config['missingContext'] = true;
+        } else {
+            $property_summary = $this->checkout_service->get_property_summary($resolved_property_id);
+            if (is_array($property_summary)) {
+                $config['propertySummary'] = $property_summary;
+            } else {
+                $config['missingContext'] = true;
+            }
         }
 
         ob_start();
@@ -73,10 +82,10 @@ class Booking_Widget_Shortcode
         <div class="<?php echo esc_attr(implode(' ', array_unique($wrapper_classes))); ?>">
             <div
                 id="<?php echo esc_attr($instance_id); ?>"
-                class="barefoot-engine-booking-widget__mount"
-                data-be-booking-widget
-                data-be-booking-widget-id="<?php echo esc_attr($instance_id); ?>"
-                data-be-booking-widget-config="<?php echo esc_attr($config_id); ?>"
+                class="barefoot-engine-booking-checkout__mount"
+                data-be-booking-checkout
+                data-be-booking-checkout-id="<?php echo esc_attr($instance_id); ?>"
+                data-be-booking-checkout-config="<?php echo esc_attr($config_id); ?>"
             ></div>
             <script id="<?php echo esc_attr($config_id); ?>" type="application/json"><?php echo wp_json_encode($config); ?></script>
         </div>
@@ -100,28 +109,11 @@ class Booking_Widget_Shortcode
             }
         }
 
-        if (array_key_exists('redirect_url', $raw_attributes)) {
-            $redirect_url = $this->sanitize_redirect_url((string) $attributes['redirect_url']);
-            if ($redirect_url !== '') {
-                $config['redirectUrl'] = $redirect_url;
-            }
-        }
-
         if (array_key_exists('reztypeid', $raw_attributes) && is_numeric($attributes['reztypeid'])) {
             $reztypeid = (int) $attributes['reztypeid'];
             if ($reztypeid > 0) {
                 $config['reztypeid'] = $reztypeid;
             }
-        }
-
-        if (array_key_exists('months_to_show', $raw_attributes) && is_numeric($attributes['months_to_show'])) {
-            $months = (int) $attributes['months_to_show'];
-            $config['calendarOptions']['monthsToShow'] = max(1, min(6, $months));
-        }
-
-        if (array_key_exists('default_min_days', $raw_attributes) && is_numeric($attributes['default_min_days'])) {
-            $days = (int) $attributes['default_min_days'];
-            $config['calendarOptions']['defaultMinDays'] = max(1, $days);
         }
 
         return $config;
@@ -167,19 +159,5 @@ class Booking_Widget_Shortcode
         }
 
         return $normalized;
-    }
-
-    private function sanitize_redirect_url(string $url): string
-    {
-        $normalized_url = trim($url);
-        if ($normalized_url === '') {
-            return '';
-        }
-
-        if (strpos($normalized_url, '/') === 0) {
-            return $normalized_url;
-        }
-
-        return esc_url_raw($normalized_url);
     }
 }

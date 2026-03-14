@@ -1,12 +1,12 @@
 <?php
 
-namespace BarefootEngine\Widgets\Booking;
+namespace BarefootEngine\Widgets\BookingCheckout;
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-class Booking_Widget_Preset_Registry
+class Booking_Checkout_Preset_Registry
 {
     private const DEFAULT_PRESET_KEY = 'default';
 
@@ -15,8 +15,10 @@ class Booking_Widget_Preset_Registry
      */
     private const FALLBACK_PRESET = [
         'currency' => '$',
-        'redirectUrl' => '/booking-confirmation',
         'reztypeid' => 26,
+        'paymentMode' => 'ON',
+        'portalId' => '',
+        'sourceOfBusiness' => '',
         'calendarOptions' => [
             'monthsToShow' => 2,
             'datepickerPlacement' => 'auto',
@@ -31,20 +33,57 @@ class Booking_Widget_Preset_Registry
             'defaultValue' => '2',
             'options' => ['1', '2', '3', '4', '5', '6', '7', '8+'],
         ],
+        'links' => [
+            'termsUrl' => '',
+            'rentalAgreementUrl' => '',
+        ],
         'labels' => [
-            'title' => 'Book This Property',
+            'title' => 'Complete Your Booking',
+            'summaryTitle' => 'Payable Amount',
+            'guestStepTitle' => 'Primary Guest Details',
+            'paymentStepTitle' => 'Payment Options',
+            'proceedToPay' => 'Proceed to Pay',
+            'paySecurely' => 'Pay Securely',
+            'goBack' => 'Go Back',
+            'listingDetails' => 'See listing details',
             'dates' => 'Dates',
+            'guests' => 'Guests',
+            'changeDates' => 'Change dates',
+            'changeGuests' => 'Change guests',
+            'changeDatesModalTitle' => 'Change dates',
+            'modalApply' => 'Apply',
+            'modalCancel' => 'Cancel',
+            'modalClear' => 'Clear',
+            'guestIncrement' => 'Increase guests',
+            'guestDecrement' => 'Decrease guests',
+            'applyGuestChange' => 'Apply',
+            'closeEditor' => 'Close',
+            'checkIn' => 'Check-In',
+            'checkOut' => 'Check-Out',
+            'guestCount' => 'Guest',
+            'noDatesSelected' => 'No dates selected',
+            'adultSingular' => 'adult',
+            'adultPlural' => 'adults',
+            'rent' => 'Rent',
+            'tax' => 'Tax',
+            'total' => 'Total',
+            'depositAmount' => 'Deposit Amount',
+            'payableAmount' => 'Payable Amount',
             'checking' => 'Checking live availability...',
             'available' => 'Selected dates are available.',
             'unavailable' => 'Selected dates are unavailable.',
-            'error' => 'Live availability check failed. Please try again.',
-            'idle' => 'Select dates and guests to check availability.',
-            'daily' => 'Rent',
-            'subtotal' => 'Subtotal',
-            'tax' => 'Tax',
-            'total' => 'Total',
-            'bookNow' => 'BOOK NOW',
-            'missingContext' => 'Property context is required to load the booking widget.',
+            'error' => 'We could not update this booking quote right now. Please try again.',
+            'idle' => 'No booking information is active.',
+            'sessionReady' => 'Your booking details are ready for payment.',
+            'processingPayment' => 'Processing booking...',
+            'paymentSuccessTitle' => 'Booking Confirmed',
+            'paymentSuccessBody' => 'Your reservation was created successfully.',
+            'missingContext' => 'Property context is required to load checkout.',
+            'ageConfirmation' => 'I confirm the primary guest checking in is 25 years of age or older.',
+            'termsPrefix' => 'By submitting this form, you agree to this listing\'s',
+            'termsLinkText' => 'terms and conditions',
+            'rentalAgreementPrefix' => 'By submitting this form, you agree to abide by the terms and conditions in the rental agreement.',
+            'rentalAgreementLinkText' => 'View rental agreement.',
         ],
     ];
 
@@ -63,7 +102,7 @@ class Booking_Widget_Preset_Registry
         }
 
         $presets = $this->load_plugin_presets();
-        $filtered_presets = apply_filters('barefoot_engine_booking_widget_presets', $presets);
+        $filtered_presets = apply_filters('barefoot_engine_booking_checkout_presets', $presets);
 
         if (!is_array($filtered_presets)) {
             $filtered_presets = $presets;
@@ -112,7 +151,7 @@ class Booking_Widget_Preset_Registry
      */
     private function load_plugin_presets(): array
     {
-        $preset_file = BAREFOOT_ENGINE_PLUGIN_DIR . 'config/booking-widget/presets.php';
+        $preset_file = BAREFOOT_ENGINE_PLUGIN_DIR . 'config/booking-checkout/presets.php';
         if (!is_readable($preset_file)) {
             return [
                 self::DEFAULT_PRESET_KEY => self::FALLBACK_PRESET,
@@ -151,15 +190,20 @@ class Booking_Widget_Preset_Registry
             $normalized['currency'] = $currency !== '' ? $currency : '$';
         }
 
-        if (array_key_exists('redirectUrl', $preset)) {
-            $redirect_url = $this->normalize_redirect_url($preset['redirectUrl']);
-            if ($redirect_url !== '') {
-                $normalized['redirectUrl'] = $redirect_url;
-            }
-        }
-
         if (array_key_exists('reztypeid', $preset)) {
             $normalized['reztypeid'] = $this->normalize_positive_int($preset['reztypeid'], 26);
+        }
+
+        if (array_key_exists('paymentMode', $preset)) {
+            $normalized['paymentMode'] = $this->normalize_payment_mode($preset['paymentMode']);
+        }
+
+        if (array_key_exists('portalId', $preset)) {
+            $normalized['portalId'] = sanitize_text_field((string) $preset['portalId']);
+        }
+
+        if (array_key_exists('sourceOfBusiness', $preset)) {
+            $normalized['sourceOfBusiness'] = sanitize_text_field((string) $preset['sourceOfBusiness']);
         }
 
         if (isset($preset['calendarOptions']) && is_array($preset['calendarOptions'])) {
@@ -230,25 +274,24 @@ class Booking_Widget_Preset_Registry
             }
         }
 
+        if (isset($preset['links']) && is_array($preset['links'])) {
+            $links = [];
+            foreach (['termsUrl', 'rentalAgreementUrl'] as $allowed_key) {
+                if (!array_key_exists($allowed_key, $preset['links'])) {
+                    continue;
+                }
+
+                $links[$allowed_key] = esc_url_raw((string) $preset['links'][$allowed_key]);
+            }
+
+            if (!empty($links)) {
+                $normalized['links'] = $links;
+            }
+        }
+
         if (isset($preset['labels']) && is_array($preset['labels'])) {
             $labels = [];
-            $allowed_keys = [
-                'title',
-                'dates',
-                'checking',
-                'available',
-                'unavailable',
-                'error',
-                'idle',
-                'daily',
-                'subtotal',
-                'tax',
-                'total',
-                'bookNow',
-                'missingContext',
-            ];
-
-            foreach ($allowed_keys as $allowed_key) {
+            foreach (array_keys(self::FALLBACK_PRESET['labels']) as $allowed_key) {
                 if (!array_key_exists($allowed_key, $preset['labels'])) {
                     continue;
                 }
@@ -339,22 +382,11 @@ class Booking_Widget_Preset_Registry
     /**
      * @param mixed $value
      */
-    private function normalize_redirect_url($value): string
+    private function normalize_payment_mode($value): string
     {
-        if (!is_scalar($value)) {
-            return '';
-        }
+        $normalized = strtoupper(trim((string) $value));
 
-        $normalized = trim((string) $value);
-        if ($normalized === '') {
-            return '';
-        }
-
-        if (strpos($normalized, '/') === 0) {
-            return $normalized;
-        }
-
-        return esc_url_raw($normalized);
+        return in_array($normalized, ['ON', 'TRUE', 'FALSE'], true) ? $normalized : 'ON';
     }
 
     /**

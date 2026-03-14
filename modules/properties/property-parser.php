@@ -602,6 +602,235 @@ class Property_Parser
     }
 
     /**
+     * @return array{
+     *     rate_details: array<int, array{name: string, value: string, amount: float|null, rate_id: string}>,
+     *     payment_schedule: array<int, array{due_date: string, amount: float|null, raw_amount: string}>,
+     *     quote_info: array{leaseid: int, arrived_date: string, departure_date: string, num_adult: int, num_pet: int, num_baby: int, num_child: int},
+     *     raw_payload: string
+     * }|WP_Error
+     */
+    public function parse_create_quote_and_payment_schedule(string $payload): array|WP_Error
+    {
+        $normalized = trim($payload);
+        if ($normalized === '') {
+            return new WP_Error(
+                'barefoot_engine_property_invalid_checkout_quote_payload',
+                __('Barefoot returned an empty checkout quote payload.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $document = $this->load_document_with_wrapped_roots($normalized);
+        if ($document === null) {
+            return new WP_Error(
+                'barefoot_engine_property_invalid_checkout_quote_payload',
+                __('Barefoot returned an invalid checkout quote payload.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $xpath = new \DOMXPath($document);
+        $rate_details = [];
+        $payment_schedule = [];
+        $quote_info = [
+            'leaseid' => 0,
+            'arrived_date' => '',
+            'departure_date' => '',
+            'num_adult' => 0,
+            'num_pet' => 0,
+            'num_baby' => 0,
+            'num_child' => 0,
+        ];
+
+        $rate_nodes = $xpath->query('//*[local-name()="propertyratesdetails"]');
+        if ($rate_nodes !== false) {
+            foreach ($rate_nodes as $rate_node) {
+                if (!$rate_node instanceof \DOMElement) {
+                    continue;
+                }
+
+                $rate_details[] = $this->parse_rate_detail_node($rate_node);
+            }
+        }
+
+        $schedule_nodes = $xpath->query('//*[local-name()="PaymentSchedule"]');
+        if ($schedule_nodes !== false) {
+            foreach ($schedule_nodes as $schedule_node) {
+                if (!$schedule_node instanceof \DOMElement) {
+                    continue;
+                }
+
+                $due_date = $this->normalize_booking_date($this->read_child_text($schedule_node, 'duedate'));
+                $raw_amount = $this->read_child_text($schedule_node, 'amount');
+                $amount = $this->normalize_rate_amount($raw_amount);
+
+                if ($due_date === '' && $amount === null) {
+                    continue;
+                }
+
+                $payment_schedule[] = [
+                    'due_date' => $due_date,
+                    'amount' => $amount,
+                    'raw_amount' => $raw_amount,
+                ];
+            }
+        }
+
+        $quote_info_node = $xpath->query('//*[local-name()="QuoteInfo"]')->item(0);
+        if ($quote_info_node instanceof \DOMElement) {
+            $quote_info = [
+                'leaseid' => (int) $this->normalize_positive_int($this->read_child_text($quote_info_node, 'Leaseid')),
+                'arrived_date' => $this->normalize_booking_date($this->read_child_text($quote_info_node, 'ArrivedDate')),
+                'departure_date' => $this->normalize_booking_date($this->read_child_text($quote_info_node, 'DepartureDate')),
+                'num_adult' => (int) $this->normalize_positive_int($this->read_child_text($quote_info_node, 'Num_adult')),
+                'num_pet' => (int) $this->normalize_positive_int($this->read_child_text($quote_info_node, 'Num_pet')),
+                'num_baby' => (int) $this->normalize_positive_int($this->read_child_text($quote_info_node, 'Num_baby')),
+                'num_child' => (int) $this->normalize_positive_int($this->read_child_text($quote_info_node, 'Num_child')),
+            ];
+        }
+
+        return [
+            'rate_details' => $rate_details,
+            'payment_schedule' => $payment_schedule,
+            'quote_info' => $quote_info,
+            'raw_payload' => $normalized,
+        ];
+    }
+
+    /**
+     * @return int|WP_Error
+     */
+    public function parse_set_consumer_info(string $payload): int|WP_Error
+    {
+        $normalized = trim($payload);
+        if ($normalized === '') {
+            return new WP_Error(
+                'barefoot_engine_checkout_invalid_consumer_response',
+                __('Barefoot returned an empty tenant response.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        if (!is_numeric($normalized)) {
+            return new WP_Error(
+                'barefoot_engine_checkout_invalid_consumer_response',
+                __('Barefoot returned an invalid tenant response.', 'barefoot-engine'),
+                [
+                    'status' => 502,
+                    'details' => $normalized,
+                ]
+            );
+        }
+
+        $tenant_id = (int) $normalized;
+        if ($tenant_id <= 0) {
+            return new WP_Error(
+                'barefoot_engine_checkout_invalid_consumer_response',
+                __('Barefoot could not create the tenant record for checkout.', 'barefoot-engine'),
+                [
+                    'status' => 502,
+                    'details' => $normalized,
+                ]
+            );
+        }
+
+        return $tenant_id;
+    }
+
+    /**
+     * @return array{folio_id: string, tenant: string, amount: float|null, credit_card_num: string, raw_payload: string}|WP_Error
+     */
+    public function parse_property_booking_result(string $payload): array|WP_Error
+    {
+        $normalized = trim($payload);
+        if ($normalized === '') {
+            return new WP_Error(
+                'barefoot_engine_checkout_invalid_booking_response',
+                __('Barefoot returned an empty booking response.', 'barefoot-engine'),
+                ['status' => 502]
+            );
+        }
+
+        $lowercase = strtolower($normalized);
+        if (str_contains($lowercase, 'property invalidation')) {
+            return new WP_Error(
+                'barefoot_engine_checkout_property_invalidation',
+                __('The selected property is no longer available for those dates.', 'barefoot-engine'),
+                [
+                    'status' => 409,
+                    'details' => $normalized,
+                ]
+            );
+        }
+
+        if (str_contains($lowercase, 'cc failed')) {
+            return new WP_Error(
+                'barefoot_engine_checkout_card_failed',
+                __('The payment gateway rejected the card details.', 'barefoot-engine'),
+                [
+                    'status' => 400,
+                    'details' => $normalized,
+                ]
+            );
+        }
+
+        if (str_contains($lowercase, 'cc duplicate')) {
+            return new WP_Error(
+                'barefoot_engine_checkout_duplicate_charge',
+                __('Barefoot reported this booking payment as a duplicate.', 'barefoot-engine'),
+                [
+                    'status' => 409,
+                    'details' => $normalized,
+                ]
+            );
+        }
+
+        $document = $this->load_document_with_wrapped_roots($normalized);
+        if ($document === null) {
+            return new WP_Error(
+                'barefoot_engine_checkout_invalid_booking_response',
+                __('Barefoot returned an invalid booking response.', 'barefoot-engine'),
+                [
+                    'status' => 502,
+                    'details' => $normalized,
+                ]
+            );
+        }
+
+        $payment_info_node = (new \DOMXPath($document))->query('//*[local-name()="PaymentInfo"]')->item(0);
+        if (!$payment_info_node instanceof \DOMElement) {
+            return new WP_Error(
+                'barefoot_engine_checkout_invalid_booking_response',
+                __('Barefoot did not return booking confirmation details.', 'barefoot-engine'),
+                [
+                    'status' => 502,
+                    'details' => $normalized,
+                ]
+            );
+        }
+
+        $folio_id = $this->read_first_matching_child_text($payment_info_node, ['FolioID', 'FolioId', 'folioid']);
+        if ($folio_id === '') {
+            return new WP_Error(
+                'barefoot_engine_checkout_invalid_booking_response',
+                __('Barefoot did not return a reservation number.', 'barefoot-engine'),
+                [
+                    'status' => 502,
+                    'details' => $normalized,
+                ]
+            );
+        }
+
+        return [
+            'folio_id' => $folio_id,
+            'tenant' => $this->read_first_matching_child_text($payment_info_node, ['Tenant', 'tenant']),
+            'amount' => $this->normalize_rate_amount($this->read_first_matching_child_text($payment_info_node, ['Amount', 'amount'])),
+            'credit_card_num' => $this->read_first_matching_child_text($payment_info_node, ['CreditcardNum', 'CreditCardNum', 'creditcardnum']),
+            'raw_payload' => $normalized,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>|WP_Error
      */
     public function parse_property_images(string $xml): array|WP_Error
@@ -777,6 +1006,40 @@ class Property_Parser
         }
 
         return '';
+    }
+
+    /**
+     * @return array{name: string, value: string, amount: float|null, rate_id: string}
+     */
+    private function parse_rate_detail_node(\DOMElement $row_node): array
+    {
+        $name = '';
+        $value = '';
+        $rate_id = '';
+
+        foreach ($row_node->childNodes as $child_node) {
+            if (!$child_node instanceof \DOMElement) {
+                continue;
+            }
+
+            $key = strtolower(trim($child_node->localName));
+            $text = trim($child_node->textContent);
+
+            if ($key === 'ratesname') {
+                $name = $text;
+            } elseif ($key === 'ratesvalue') {
+                $value = $text;
+            } elseif ($key === 'ratesid') {
+                $rate_id = $text;
+            }
+        }
+
+        return [
+            'name' => $name,
+            'value' => $value,
+            'amount' => $this->normalize_rate_amount($value),
+            'rate_id' => $rate_id,
+        ];
     }
 
     /**
@@ -1099,6 +1362,17 @@ class Property_Parser
         }
 
         return (float) $normalized;
+    }
+
+    private function normalize_positive_int(mixed $value): int
+    {
+        if (!is_scalar($value) || !is_numeric((string) $value)) {
+            return 0;
+        }
+
+        $normalized = (int) $value;
+
+        return $normalized > 0 ? $normalized : 0;
     }
 
 }

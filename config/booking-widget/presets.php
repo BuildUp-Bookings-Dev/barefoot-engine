@@ -22,6 +22,16 @@ if (!defined('ABSPATH')) {
 |   Display currency symbol or prefix.
 |   Example: '$'
 |
+| 'redirectUrl' => string
+|   URL used by the BOOK NOW button when dates are available.
+|   Query params appended automatically:
+|   - property_id
+|   - check_in
+|   - check_out
+|   - guests
+|   - reztypeid
+|   Example: '/booking-confirmation'
+|
 | 'reztypeid' => int
 |   Barefoot reservation type ID used for quote totals.
 |
@@ -53,6 +63,7 @@ if (!defined('ABSPATH')) {
 |   'subtotal' => string,
 |   'tax' => string,
 |   'total' => string,
+|   'bookNow' => string,
 |   'missingContext' => string,
 | ]
 |
@@ -61,6 +72,7 @@ if (!defined('ABSPATH')) {
 return [
     'default' => [
         'currency' => '$',
+        'redirectUrl' => '/booking-confirmation',
         'reztypeid' => 26,
         'calendarOptions' => [
             'monthsToShow' => 2,
@@ -88,6 +100,7 @@ return [
             'subtotal' => 'Subtotal',
             'tax' => 'Tax',
             'total' => 'Total',
+            'bookNow' => 'BOOK NOW',
             'missingContext' => 'Property context is required to load the booking widget.',
         ],
     ],
