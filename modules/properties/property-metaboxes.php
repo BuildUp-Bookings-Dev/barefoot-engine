@@ -10,6 +10,8 @@ if (!defined('ABSPATH')) {
 
 class Property_Metaboxes
 {
+    private const FEATURED_NONCE_ACTION = 'be_save_featured_property';
+    private const FEATURED_NONCE_NAME = 'be_featured_property_nonce';
     private const GUEST_COUNT_FIELD = 'be_guest_count';
     private const BEDROOM_COUNT_FIELD = 'be_bedroom_count';
     private const BATHROOM_COUNT_FIELD = 'be_bathroom_count';
@@ -78,6 +80,15 @@ class Property_Metaboxes
     public function register(): void
     {
         add_meta_box(
+            'be-property-featured',
+            __('Featured Property', 'barefoot-engine'),
+            [$this, 'render_featured_toggle'],
+            Property_Post_Type::POST_TYPE,
+            'side',
+            'high'
+        );
+
+        add_meta_box(
             'be-property-data',
             __('Barefoot Property Data', 'barefoot-engine'),
             [$this, 'render_property_data'],
@@ -103,6 +114,74 @@ class Property_Metaboxes
             'side',
             'default'
         );
+    }
+
+    public function render_featured_toggle(\WP_Post $post): void
+    {
+        $is_featured = get_post_meta($post->ID, Property_Post_Type::FEATURED_META_KEY, true) === '1';
+        wp_nonce_field(self::FEATURED_NONCE_ACTION, self::FEATURED_NONCE_NAME);
+        ?>
+        <style>
+            .be-featured-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px}
+            .be-featured-toggle__label{font-size:13px;font-weight:600;color:#1d2327}
+            .be-featured-toggle__switch{position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:30px}
+            .be-featured-toggle__checkbox{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer}
+            .be-featured-toggle__track{position:absolute;inset:0;border-radius:999px;background:#c3c4c7;transition:background .18s ease;pointer-events:none}
+            .be-featured-toggle__track::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .18s ease}
+            .be-featured-toggle__checkbox:checked + .be-featured-toggle__track{background:#2271b1}
+            .be-featured-toggle__checkbox:checked + .be-featured-toggle__track::after{transform:translateX(22px)}
+            .be-featured-toggle__checkbox:focus-visible + .be-featured-toggle__track{outline:2px solid #2271b1;outline-offset:2px}
+            .be-featured-toggle__state{font-size:12px;font-weight:600;color:#2271b1}
+        </style>
+        <div class="be-featured-toggle">
+            <input type="hidden" name="be_property_is_featured_present" value="1" />
+            <span class="be-featured-toggle__label"><?php echo esc_html__('Set Featured', 'barefoot-engine'); ?></span>
+            <label class="be-featured-toggle__switch">
+                <input
+                    id="be-property-featured-toggle"
+                    type="checkbox"
+                    class="be-featured-toggle__checkbox"
+                    name="be_property_is_featured"
+                    value="1"
+                    <?php checked($is_featured); ?>
+                />
+                <span class="be-featured-toggle__track" aria-hidden="true"></span>
+            </label>
+        </div>
+        <p class="be-featured-toggle__state" style="margin:10px 0 0;">
+            <?php echo esc_html($is_featured ? __('Featured: On', 'barefoot-engine') : __('Featured: Off', 'barefoot-engine')); ?>
+        </p>
+        <?php
+    }
+
+    public function save_featured_flag(int $post_id, \WP_Post $post): void
+    {
+        if ($post->post_type !== Property_Post_Type::POST_TYPE) {
+            return;
+        }
+
+        if ((defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) || wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) {
+            return;
+        }
+
+        $nonce = isset($_POST[self::FEATURED_NONCE_NAME]) && is_string($_POST[self::FEATURED_NONCE_NAME])
+            ? wp_unslash($_POST[self::FEATURED_NONCE_NAME])
+            : '';
+        if ($nonce === '' || !wp_verify_nonce($nonce, self::FEATURED_NONCE_ACTION)) {
+            return;
+        }
+
+        if (!isset($_POST['be_property_is_featured_present'])) {
+            return;
+        }
+
+        if (!current_user_can('edit_post', $post_id)) {
+            return;
+        }
+
+        $is_featured = isset($_POST['be_property_is_featured']) && is_scalar($_POST['be_property_is_featured']);
+
+        update_post_meta($post_id, Property_Post_Type::FEATURED_META_KEY, $is_featured ? '1' : '0');
     }
 
     public function render_property_data(\WP_Post $post): void
@@ -144,17 +223,35 @@ class Property_Metaboxes
             echo '</section>';
         }
 
+        echo '<style>
+            .be-property-amenities-list{
+                margin:0;
+                padding-left:0;
+                list-style:disc inside;
+                display:grid;
+                grid-template-columns:repeat(3,minmax(0,1fr));
+                gap:6px 18px;
+            }
+            .be-property-amenities-list li{
+                margin:0;
+                min-width:0;
+            }
+            @media (max-width:782px){
+                .be-property-amenities-list{
+                    grid-template-columns:1fr;
+                }
+            }
+        </style>';
         echo '<section style="display:flex;flex-direction:column;gap:12px;">';
         echo '<div style="display:flex;flex-direction:column;gap:2px;">';
         echo '<h3 style="margin:0;font-size:14px;font-weight:700;color:#1d2327;">' . esc_html__('Amenities', 'barefoot-engine') . '</h3>';
-        echo '<code style="font-size:11px;color:#646970;background:none;padding:0;">a75-a258</code>';
         echo '</div>';
         echo '<div style="border:1px solid #dcdcde;border-radius:12px;background:#fff;padding:16px;">';
 
         if ($amenities === []) {
             echo '<span class="description">' . esc_html__('No amenities captured.', 'barefoot-engine') . '</span>';
         } else {
-            echo '<ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;">';
+            echo '<ul class="be-property-amenities-list">';
 
             foreach ($amenities as $amenity) {
                 $display = isset($amenity['display']) && is_string($amenity['display']) ? $amenity['display'] : '';
@@ -162,7 +259,7 @@ class Property_Metaboxes
                     continue;
                 }
 
-                echo '<li style="margin:0;">' . esc_html($display) . '</li>';
+                echo '<li>' . esc_html($display) . '</li>';
             }
 
             echo '</ul>';
@@ -190,12 +287,16 @@ class Property_Metaboxes
         echo '</tbody></table>';
 
         echo '<div style="margin-top:12px;">';
-        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
-        echo '<input type="hidden" name="action" value="barefoot_engine_sync_property" />';
-        echo '<input type="hidden" name="post_id" value="' . esc_attr((string) $post->ID) . '" />';
-        wp_nonce_field('be_sync_single_property_' . $post->ID);
-        submit_button(__('Sync This Property', 'barefoot-engine'), 'secondary', 'submit', false);
-        echo '</form>';
+        $sync_url = add_query_arg(
+            [
+                'action' => 'barefoot_engine_sync_property',
+                'post_id' => $post->ID,
+            ],
+            admin_url('admin-post.php')
+        );
+        $sync_url = wp_nonce_url($sync_url, 'be_sync_single_property_' . $post->ID);
+
+        echo '<a class="button button-secondary" href="' . esc_url($sync_url) . '">' . esc_html__('Sync This Property', 'barefoot-engine') . '</a>';
         echo '</div>';
     }
 

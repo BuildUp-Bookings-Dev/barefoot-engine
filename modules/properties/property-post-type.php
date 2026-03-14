@@ -9,6 +9,7 @@ if (!defined('ABSPATH')) {
 class Property_Post_Type
 {
     public const POST_TYPE = 'be_property';
+    public const FEATURED_META_KEY = '_be_property_is_featured';
 
     public function register(): void
     {

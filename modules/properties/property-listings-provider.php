@@ -11,6 +11,7 @@ if (!defined('ABSPATH')) {
 class Property_Listings_Provider
 {
     private const ACTIVE_IMPORT_STATUS = 'active';
+    private const FEATURED_DEFAULT_LIMIT = 9;
     private const WEEKDAY_MAP = [
         'sun' => 0,
         'mon' => 1,
@@ -100,6 +101,53 @@ class Property_Listings_Provider
     }
 
     /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function get_featured_properties(int $limit = self::FEATURED_DEFAULT_LIMIT): array
+    {
+        $normalized_limit = max(1, min(30, $limit));
+
+        $posts = get_posts(
+            [
+                'post_type' => Property_Post_Type::POST_TYPE,
+                'post_status' => 'publish',
+                'numberposts' => $normalized_limit,
+                'meta_key' => '_be_property_last_synced_at',
+                'orderby' => 'meta_value_num',
+                'order' => 'DESC',
+                'meta_query' => [
+                    'relation' => 'AND',
+                    [
+                        'key' => '_be_property_import_status',
+                        'value' => self::ACTIVE_IMPORT_STATUS,
+                    ],
+                    [
+                        'key' => Property_Post_Type::FEATURED_META_KEY,
+                        'value' => '1',
+                    ],
+                ],
+            ]
+        );
+
+        $featured_properties = [];
+
+        foreach ($posts as $post) {
+            if (!$post instanceof \WP_Post) {
+                continue;
+            }
+
+            $card = $this->build_featured_property_card($post);
+            if ($card === null) {
+                continue;
+            }
+
+            $featured_properties[] = $card;
+        }
+
+        return $featured_properties;
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     private function build_listing(\WP_Post $post, string $target_date, bool $has_selected_check_in): ?array
@@ -169,6 +217,43 @@ class Property_Listings_Provider
         }
 
         return $listing;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function build_featured_property_card(\WP_Post $post): ?array
+    {
+        $fields = get_post_meta($post->ID, '_be_property_fields', true);
+        if (!is_array($fields)) {
+            $fields = [];
+        }
+
+        $property_id = $this->clean_string(get_post_meta($post->ID, '_be_property_id', true));
+        $keyboard_id = $this->clean_string(get_post_meta($post->ID, '_be_property_keyboardid', true));
+        $title = $this->resolve_title($post, $fields, $keyboard_id, $property_id);
+        if ($title === '') {
+            return null;
+        }
+
+        $sleeps = $this->resolve_guest_count($post, $fields);
+        $bedrooms = $this->resolve_bedrooms($post, $fields);
+        $bathrooms = $this->resolve_bathrooms($post, $fields);
+        $starting_price = $this->resolve_starting_price($post);
+
+        return [
+            'id' => $this->resolve_listing_id($post, $property_id, $keyboard_id),
+            'propertyId' => $property_id,
+            'title' => $title,
+            'propertyType' => $this->clean_string($fields['PropertyType'] ?? ''),
+            'view' => $this->clean_string($fields['a261'] ?? ''),
+            'sleeps' => $sleeps,
+            'bedrooms' => $bedrooms,
+            'bathrooms' => $bathrooms,
+            'startingPrice' => $starting_price,
+            'images' => $this->resolve_images($post, $fields),
+            'permalink' => get_permalink($post),
+        ];
     }
 
     /**
@@ -496,6 +581,27 @@ class Property_Listings_Provider
         );
 
         return $candidates[0] ?? null;
+    }
+
+    private function resolve_starting_price(\WP_Post $post): ?float
+    {
+        $rates = get_post_meta($post->ID, '_be_property_rates', true);
+        if (!is_array($rates) || $rates === []) {
+            return null;
+        }
+
+        $starting_rate = $this->find_starting_rate($rates);
+        if ($starting_rate === null) {
+            return null;
+        }
+
+        if (!isset($starting_rate['amount']) || !is_numeric($starting_rate['amount'])) {
+            return null;
+        }
+
+        $amount = (float) $starting_rate['amount'];
+
+        return $amount > 0 ? $amount : null;
     }
 
     /**

@@ -73,6 +73,18 @@ if (!defined('ABSPATH')) {
 <section class="be-panel">
     <div class="be-columns">
         <h3 class="be-section-title be-heading be-rows">
+            <span class="be-icon material-symbols-outlined" aria-hidden="true">view_carousel</span>
+            <?php echo esc_html__('Featured Properties Shortcode', 'barefoot-engine'); ?>
+        </h3>
+        <p class="be-paragraph"><?php echo esc_html__('Use this shortcode to render the featured properties slider.', 'barefoot-engine'); ?></p>
+        <pre style="margin:0;padding:12px;border:1px solid #dcdcde;border-radius:8px;background:#f6f7f7;"><code>[barefoot_featured_properties limit="9"]</code></pre>
+        <p class="be-paragraph"><?php echo esc_html__('Optional attributes: limit and class.', 'barefoot-engine'); ?></p>
+    </div>
+</section>
+
+<section class="be-panel">
+    <div class="be-columns">
+        <h3 class="be-section-title be-heading be-rows">
             <span class="be-icon material-symbols-outlined" aria-hidden="true">tips_and_updates</span>
             <?php echo esc_html__('Helpful Tips', 'barefoot-engine'); ?>
         </h3>

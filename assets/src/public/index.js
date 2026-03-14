@@ -1,6 +1,7 @@
 import { BPCalendar, BP_Calendar } from '@braudypedrosa/bp-calendar';
 import listingsMapModule from './bp-listings-runtime.js';
 import { bootBookingCheckoutWidgets } from './booking-checkout.js';
+import { bootFeaturedProperties } from './featured-properties.js';
 import { BPSearchWidget, BP_SearchWidget } from '@braudypedrosa/bp-search-widget';
 
 const SEARCH_WIDGET_SELECTOR = '[data-be-search-widget]';
@@ -2791,6 +2792,104 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+let elementorFeaturedHooksBound = false;
+let elementorFeaturedObserver = null;
+
+function registerElementorFeaturedPreviewBoot() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const ensureObserver = () => {
+    if (elementorFeaturedObserver || typeof window.MutationObserver !== 'function' || !(document.body instanceof HTMLElement)) {
+      return;
+    }
+
+    let rafId = 0;
+    const queueBoot = () => {
+      if (rafId) {
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        bootFeaturedProperties();
+      });
+    };
+
+    elementorFeaturedObserver = new window.MutationObserver((mutations) => {
+      const shouldBoot = mutations.some((mutation) => {
+        if (!mutation || mutation.type !== 'childList' || mutation.addedNodes.length === 0) {
+          return false;
+        }
+
+        return Array.from(mutation.addedNodes).some((node) => {
+          if (!(node instanceof HTMLElement)) {
+            return false;
+          }
+
+          return node.matches?.('[data-be-featured-properties]') || Boolean(node.querySelector?.('[data-be-featured-properties]'));
+        });
+      });
+
+      if (shouldBoot) {
+        queueBoot();
+      }
+    });
+
+    elementorFeaturedObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Run once after wiring the observer so mounts already on the page get initialized.
+    bootFeaturedProperties();
+  };
+
+  const bindHooks = () => {
+    if (elementorFeaturedHooksBound) {
+      return;
+    }
+
+    const frontend = window.elementorFrontend;
+    if (!frontend || !frontend.hooks || typeof frontend.hooks.addAction !== 'function') {
+      ensureObserver();
+      return;
+    }
+
+    const reinitializeFeaturedProperties = () => {
+      bootFeaturedProperties();
+    };
+
+    frontend.hooks.addAction('frontend/element_ready/barefoot-featured-properties.default', reinitializeFeaturedProperties);
+    frontend.hooks.addAction('frontend/element_ready/global', reinitializeFeaturedProperties);
+    ensureObserver();
+    elementorFeaturedHooksBound = true;
+  };
+
+  const isElementorPreviewFrame = (() => {
+    try {
+      return Boolean(window.frameElement && window.frameElement.id === 'elementor-preview-iframe');
+    } catch (error) {
+      return false;
+    }
+  })();
+
+  if (window.jQuery && typeof window.jQuery === 'function') {
+    window.jQuery(window).on('elementor/frontend/init', bindHooks);
+  } else {
+    window.addEventListener('elementor/frontend/init', bindHooks);
+  }
+
+  if (isElementorPreviewFrame) {
+    ensureObserver();
+  }
+
+  bindHooks();
+}
+
+registerElementorFeaturedPreviewBoot();
+
 if (document.readyState === 'loading') {
   document.addEventListener(
     'DOMContentLoaded',
@@ -2800,6 +2899,7 @@ if (document.readyState === 'loading') {
       bootPricingTables();
       bootBookingWidgets();
       bootBookingCheckoutWidgets();
+      bootFeaturedProperties();
     },
     { once: true },
   );
@@ -2809,4 +2909,5 @@ if (document.readyState === 'loading') {
   bootPricingTables();
   bootBookingWidgets();
   bootBookingCheckoutWidgets();
+  bootFeaturedProperties();
 }

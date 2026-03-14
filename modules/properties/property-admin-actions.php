@@ -24,7 +24,7 @@ class Property_Admin_Actions
             wp_die(esc_html__('You are not allowed to sync Barefoot properties.', 'barefoot-engine'), 403);
         }
 
-        $post_id = isset($_POST['post_id']) ? absint(wp_unslash($_POST['post_id'])) : 0;
+        $post_id = isset($_REQUEST['post_id']) && is_scalar($_REQUEST['post_id']) ? absint(wp_unslash((string) $_REQUEST['post_id'])) : 0;
         check_admin_referer('be_sync_single_property_' . $post_id);
 
         $redirect_url = $post_id > 0

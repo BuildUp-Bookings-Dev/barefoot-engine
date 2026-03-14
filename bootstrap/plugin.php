@@ -29,6 +29,8 @@ use BarefootEngine\Widgets\Booking\Booking_Widget_Preset_Registry;
 use BarefootEngine\Widgets\Booking\Booking_Widget_Shortcode;
 use BarefootEngine\Widgets\BookingCheckout\Booking_Checkout_Preset_Registry;
 use BarefootEngine\Widgets\BookingCheckout\Booking_Checkout_Shortcode;
+use BarefootEngine\Widgets\FeaturedProperties\Featured_Properties_Shortcode;
+use BarefootEngine\Widgets\FeaturedProperties\Featured_Properties_Elementor;
 use BarefootEngine\Widgets\Listings\Listings_Preset_Registry;
 use BarefootEngine\Widgets\Listings\Listings_Shortcode;
 use BarefootEngine\Widgets\Pricing\Pricing_Table_Shortcode;
@@ -73,6 +75,7 @@ class Plugin
     private function define_public_hooks(): void
     {
         $public = new Frontend();
+        $featured_properties_elementor = new Featured_Properties_Elementor();
         $listings_preset_registry = new Listings_Preset_Registry();
         $search_preset_registry = new Search_Widget_Preset_Registry();
         $booking_preset_registry = new Booking_Widget_Preset_Registry();
@@ -83,6 +86,7 @@ class Plugin
             $property_listings_provider,
             $search_preset_registry
         );
+        $featured_properties_shortcode = new Featured_Properties_Shortcode($property_listings_provider);
         $shortcode = new Search_Widget_Shortcode($search_preset_registry);
         $booking_shortcode = new Booking_Widget_Shortcode($booking_preset_registry);
         $booking_checkout_shortcode = new Booking_Checkout_Shortcode(
@@ -92,10 +96,12 @@ class Plugin
         $pricing_table_shortcode = new Pricing_Table_Shortcode();
 
         $this->loader->add_action('init', $listings_shortcode, 'register', 10, 0);
+        $this->loader->add_action('init', $featured_properties_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $booking_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $booking_checkout_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $pricing_table_shortcode, 'register', 10, 0);
+        $this->loader->add_action('plugins_loaded', $featured_properties_elementor, 'register', 20, 0);
         $this->loader->add_action('wp_enqueue_scripts', $public, 'enqueue_assets');
         $this->loader->add_action('wp_head', $public, 'render_custom_css', 20, 0);
         $this->loader->add_filter('script_loader_tag', $public, 'mark_module_scripts', 10, 3);
@@ -137,6 +143,7 @@ class Plugin
         $this->loader->add_action('init', $taxonomies, 'register', 10, 0);
         $this->loader->add_action('init', $booking_records, 'register', 10, 0);
         $this->loader->add_action('add_meta_boxes_' . Property_Post_Type::POST_TYPE, $metaboxes, 'register', 10, 0);
+        $this->loader->add_action('save_post_' . Property_Post_Type::POST_TYPE, $metaboxes, 'save_featured_flag', 10, 2);
         $this->loader->add_action('add_meta_boxes_' . Property_Booking_Records::POST_TYPE, $booking_records, 'register_metaboxes', 10, 0);
         $this->loader->add_filter('manage_edit-' . Property_Booking_Records::POST_TYPE . '_columns', $booking_records, 'filter_columns', 10, 1);
         $this->loader->add_action('manage_' . Property_Booking_Records::POST_TYPE . '_posts_custom_column', $booking_records, 'render_column', 10, 2);
