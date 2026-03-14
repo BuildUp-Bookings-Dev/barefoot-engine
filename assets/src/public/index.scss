@@ -1649,10 +1649,32 @@
   background: #fff !important;
 }
 
+.barefoot-engine-public {
+  --be-calendar-scale: 0.8;
+}
+
+.barefoot-engine-public .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-popup {
+  scale: var(--be-calendar-scale);
+  transform-origin: top left;
+}
+
 .barefoot-engine-public .barefoot-engine-booking-checkout__modal .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-popup {
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
+  transform-origin: top center !important;
+}
+
+@supports not (scale: 1) {
+  .barefoot-engine-public .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-popup {
+    transform: scale(var(--be-calendar-scale));
+    transform-origin: top left;
+  }
+
+  .barefoot-engine-public .barefoot-engine-booking-checkout__modal .bp-calendar-datepicker-wrapper .bp-calendar-datepicker-popup {
+    transform: scale(var(--be-calendar-scale)) !important;
+    transform-origin: top center !important;
+  }
 }
 
 .barefoot-engine-public .bp-calendar-day-price {
