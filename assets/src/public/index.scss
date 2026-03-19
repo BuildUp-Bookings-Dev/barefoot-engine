@@ -464,12 +464,18 @@
   overflow: hidden;
 }
 
+.barefoot-engine-featured-properties__outer-swiper .swiper-wrapper {
+  align-items: stretch;
+}
+
 .barefoot-engine-featured-properties__slide {
+  display: flex;
   height: auto;
 }
 
 .barefoot-engine-featured-properties__card {
   height: 100%;
+  width: 100%;
   border: 1px solid #dbe4ec;
   border-radius: 0;
   background: #ffffff;

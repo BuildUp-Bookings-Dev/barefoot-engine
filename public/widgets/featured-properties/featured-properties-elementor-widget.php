@@ -294,6 +294,18 @@ class Featured_Properties_Elementor_Widget extends Widget_Base
         );
 
         $this->add_control(
+            'card_outer_padding',
+            [
+                'label' => __('Card Padding', 'barefoot-engine'),
+                'type' => Controls_Manager::DIMENSIONS,
+                'size_units' => ['px', 'em', 'rem'],
+                'selectors' => [
+                    '{{WRAPPER}} .barefoot-engine-featured-properties__card' => 'padding: {{TOP}}{{UNIT}} {{RIGHT}}{{UNIT}} {{BOTTOM}}{{UNIT}} {{LEFT}}{{UNIT}}; box-sizing: border-box;',
+                ],
+            ]
+        );
+
+        $this->add_control(
             'card_padding',
             [
                 'label' => __('Card Content Padding', 'barefoot-engine'),
