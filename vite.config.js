@@ -7,6 +7,14 @@ export default defineConfig({
   publicDir: false,
   resolve: {
     alias: {
+      '@braudypedrosa/bp-calendar/styles': path.resolve(
+        __dirname,
+        'node_modules/@braudypedrosa/bp-calendar/src/bp-calendar.scss'
+      ),
+      '@braudypedrosa/bp-calendar': path.resolve(
+        __dirname,
+        'node_modules/@braudypedrosa/bp-calendar/src/bp-calendar.js'
+      ),
       '@braudypedrosa/bp-search-widget/styles': path.resolve(
         __dirname,
         'node_modules/@braudypedrosa/bp-search-widget/src/bp-search-widget.scss'
