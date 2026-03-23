@@ -178,7 +178,7 @@ return [
         'pageSize' => 12,
         'searchWidget' => [
             'showLocation' => true,
-            'filterDisplayMode' => 'left-slide',
+            'filterDisplayMode' => 'modal',
             'showFilterButton' => true,
             'locationLabel' => 'Keyword',
             'locationPlaceholder' => 'Search keyword',

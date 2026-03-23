@@ -358,9 +358,18 @@ class Listings_Shortcode
         }
 
         $search_widget = $config['searchWidget'];
+        $fields = isset($search_widget['fields']) && is_array($search_widget['fields'])
+            ? array_values(array_filter($search_widget['fields'], static fn($item): bool => is_array($item)))
+            : [];
         $filters = isset($search_widget['filters']) && is_array($search_widget['filters'])
             ? array_values(array_filter($search_widget['filters'], static fn($item): bool => is_array($item)))
             : [];
+
+        $next_fields = [];
+        foreach ($fields as $field) {
+            $field['required'] = false;
+            $next_fields[] = $field;
+        }
 
         $amenity_options = $this->get_taxonomy_term_options(Property_Taxonomies::AMENITY_TAXONOMY);
         $type_options = $this->get_taxonomy_term_options(Property_Taxonomies::TYPE_TAXONOMY);
@@ -404,9 +413,9 @@ class Listings_Shortcode
                 $filter['label'] = $dynamic['label'];
                 $filter['type'] = $dynamic['type'];
                 $filter['options'] = $options;
-                $filter['required'] = false;
             }
 
+            $filter['required'] = false;
             $next_filters[] = $filter;
             $seen_keys[$key] = true;
         }
@@ -430,6 +439,7 @@ class Listings_Shortcode
             ];
         }
 
+        $search_widget['fields'] = $next_fields;
         $search_widget['filters'] = $this->prioritize_filter_order($next_filters);
         $config['searchWidget'] = $search_widget;
 

@@ -136,6 +136,7 @@ function bootListingsWidgets() {
               },
             });
             installListingsSearchSubmitRule(searchWidget);
+            installListingsFilterApplySearch(searchWidget, host);
             installListingsClearButtonSync(searchWidget, mountNode, host);
 
             if (hasInitialWidgetValues) {
@@ -421,7 +422,7 @@ function installListingsSearchSubmitRule(widget) {
     return;
   }
 
-  widget.beInitialNonDateCriteria = captureNonDateCriteriaSnapshot(widget);
+  widget.beInitialSearchCriteria = captureListingsSearchCriteriaSnapshot(widget);
   installCustomChoicePopoverScrollbar(widget);
 
   widget.canSubmitSearch = function canSubmitSearchForListings() {
@@ -436,12 +437,36 @@ function installListingsSearchSubmitRule(widget) {
       return false;
     }
 
-    return hasAtLeastOneNonDateCriterion(this, this.beInitialNonDateCriteria || null);
+    return hasAtLeastOneListingsCriterion(this, this.beInitialSearchCriteria || null);
   };
 
   if (typeof widget.syncSearchDisabledState === 'function') {
     widget.syncSearchDisabledState();
   }
+}
+
+function installListingsFilterApplySearch(widget, hostNode) {
+  if (!widget || widget.isDestroyed || widget.beFilterApplySearchInstalled || !(hostNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const onClick = (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || !target.closest('[data-action="apply-filters"]')) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      if (widget.isDestroyed || typeof widget.handleSearch !== 'function') {
+        return;
+      }
+
+      widget.handleSearch();
+    });
+  };
+
+  hostNode.addEventListener('click', onClick);
+  widget.beFilterApplySearchInstalled = true;
 }
 
 function installCustomChoicePopoverScrollbar(widget) {
@@ -602,9 +627,11 @@ function teardownCustomChoicePopoverScrollbar(popover) {
   choicePopoverScrollbarStates.delete(popover);
 }
 
-function captureNonDateCriteriaSnapshot(widget) {
+function captureListingsSearchCriteriaSnapshot(widget) {
   return {
     location: normalizeString(widget?.state?.location ?? ''),
+    checkIn: normalizeDateInput(widget?.state?.checkIn ?? ''),
+    checkOut: normalizeDateInput(widget?.state?.checkOut ?? ''),
     customFields: normalizeComparableMap(widget?.state?.customFields),
     filters: normalizeComparableMap(widget?.state?.filters),
   };
@@ -678,14 +705,20 @@ function hasChangedMeaningfulEntry(currentMap, baselineMap) {
   return false;
 }
 
-function hasAtLeastOneNonDateCriterion(widget, baseline = null) {
+function hasCompleteDateRange(checkIn, checkOut) {
+  return !isEmptyValue(checkIn) && !isEmptyValue(checkOut);
+}
+
+function hasAtLeastOneListingsCriterion(widget, baseline = null) {
   if (!widget || widget.isDestroyed) {
     return false;
   }
 
-  const currentSnapshot = captureNonDateCriteriaSnapshot(widget);
+  const currentSnapshot = captureListingsSearchCriteriaSnapshot(widget);
   const baselineSnapshot = isPlainObject(baseline) ? baseline : {
     location: '',
+    checkIn: '',
+    checkOut: '',
     customFields: {},
     filters: {},
   };
@@ -693,6 +726,19 @@ function hasAtLeastOneNonDateCriterion(widget, baseline = null) {
   if (
     currentSnapshot.location !== baselineSnapshot.location
     && currentSnapshot.location !== ''
+  ) {
+    return true;
+  }
+
+  const currentHasDateRange = hasCompleteDateRange(currentSnapshot.checkIn, currentSnapshot.checkOut);
+  const baselineHasDateRange = hasCompleteDateRange(baselineSnapshot.checkIn, baselineSnapshot.checkOut);
+  if (
+    currentHasDateRange
+    && (
+      !baselineHasDateRange
+      || currentSnapshot.checkIn !== baselineSnapshot.checkIn
+      || currentSnapshot.checkOut !== baselineSnapshot.checkOut
+    )
   ) {
     return true;
   }

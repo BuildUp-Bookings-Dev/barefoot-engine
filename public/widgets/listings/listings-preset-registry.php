@@ -27,7 +27,7 @@ class Listings_Preset_Registry
         'searchWidget' => [
             'targetUrl' => '',
             'showLocation' => true,
-            'filterDisplayMode' => 'left-slide',
+            'filterDisplayMode' => 'modal',
             'showFilterButton' => true,
             'locationLabel' => 'Keyword',
             'locationPlaceholder' => 'Search keyword',
