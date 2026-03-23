@@ -136,6 +136,7 @@ function bootListingsWidgets() {
               },
             });
             installListingsSearchSubmitRule(searchWidget);
+            installListingsClearButtonSync(searchWidget, mountNode, host);
 
             if (hasInitialWidgetValues) {
               applySearchPayloadToWidgetState(searchWidget, initialSearchPayload);
@@ -476,17 +477,7 @@ function installCustomChoicePopoverScrollbar(widget) {
 }
 
 function syncCustomChoicePopoverScrollbar(widget) {
-  const popover = widget?.openPopover?.popover;
-  if (!(popover instanceof HTMLElement)) {
-    return;
-  }
-
-  const state = ensureCustomChoicePopoverScrollbar(popover);
-  if (!state) {
-    return;
-  }
-
-  updateCustomChoicePopoverScrollbar(popover, state);
+  return;
 }
 
 function teardownCustomChoicePopoverScrollbarForWidget(widget) {
@@ -1349,6 +1340,57 @@ function applySearchPayloadToWidgetState(widget, payload) {
   }
 }
 
+function getEmbeddedSearchWidgetPayload(widget) {
+  if (!widget || widget.isDestroyed) {
+    return {
+      location: '',
+      checkIn: '',
+      checkOut: '',
+      customFields: {},
+      filters: {},
+    };
+  }
+
+  return {
+    location: normalizeString(widget.state?.location ?? ''),
+    checkIn: normalizeDateInput(widget.state?.checkIn ?? ''),
+    checkOut: normalizeDateInput(widget.state?.checkOut ?? ''),
+    customFields: normalizeComparableMap(widget.state?.customFields),
+    filters: normalizeComparableMap(widget.state?.filters),
+  };
+}
+
+function hasEmbeddedSearchWidgetSelections(widget) {
+  const payload = getEmbeddedSearchWidgetPayload(widget);
+
+  return hasSearchPayload(payload)
+    || !isEmptyValue(payload.checkIn)
+    || !isEmptyValue(payload.checkOut);
+}
+
+function hasEmbeddedSearchDraftValues(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return false;
+  }
+
+  const host = mountNode.querySelector('.barefoot-engine-listings__search-slot');
+  if (!(host instanceof HTMLElement)) {
+    return false;
+  }
+
+  const keywordInput = host.querySelector('.bp-search-widget__input');
+  if (keywordInput instanceof HTMLInputElement && keywordInput.value.trim() !== '') {
+    return true;
+  }
+
+  const dateInput = host.querySelector('.bp-calendar-datepicker-input');
+  if (dateInput instanceof HTMLInputElement && dateInput.value.trim() !== '') {
+    return true;
+  }
+
+  return false;
+}
+
 function ensureClearSearchButton(mountNode) {
   if (!(mountNode instanceof HTMLElement)) {
     return null;
@@ -1398,7 +1440,43 @@ function updateClearSearchButton(mountNode) {
     return;
   }
 
-  button.hidden = !(mountNode.beEmbeddedSearchWidget && mountNode.beHasActiveSearch);
+  const widgetHasSelections = hasEmbeddedSearchWidgetSelections(mountNode.beEmbeddedSearchWidget);
+  const draftHasSelections = hasEmbeddedSearchDraftValues(mountNode);
+  button.hidden = !(mountNode.beEmbeddedSearchWidget && (mountNode.beHasActiveSearch || widgetHasSelections || draftHasSelections));
+}
+
+function installListingsClearButtonSync(widget, mountNode, hostNode = null) {
+  if (!widget || widget.isDestroyed || !(mountNode instanceof HTMLElement) || widget.beClearButtonSyncInstalled) {
+    return;
+  }
+
+  const originalRender = typeof widget.render === 'function'
+    ? widget.render.bind(widget)
+    : null;
+
+  if (!originalRender) {
+    return;
+  }
+
+  widget.render = function patchedRender(...args) {
+    const result = originalRender(...args);
+    updateClearSearchButton(mountNode);
+    return result;
+  };
+
+  const syncVisibility = () => {
+    window.requestAnimationFrame(() => {
+      updateClearSearchButton(mountNode);
+    });
+  };
+
+  if (hostNode instanceof HTMLElement) {
+    hostNode.addEventListener('input', syncVisibility);
+    hostNode.addEventListener('change', syncVisibility);
+    hostNode.addEventListener('click', syncVisibility);
+  }
+
+  widget.beClearButtonSyncInstalled = true;
 }
 
 function clearEmbeddedSearchInputs(mountNode) {
