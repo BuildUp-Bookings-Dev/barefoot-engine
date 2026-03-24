@@ -354,7 +354,7 @@ function buildCheckoutRuntime(config) {
   const missingContext = !propertyId || Boolean(config?.missingContext);
   const currency = sanitizeText(config?.currency, '$');
   const reztypeid = sanitizePositiveInt(config?.reztypeid, 26);
-  const paymentMode = sanitizePaymentMode(config?.paymentMode, 'ON');
+  const paymentMode = sanitizePaymentMode(config?.paymentMode, 'TRUE');
   const portalId = sanitizeText(config?.portalId, '');
   const sourceOfBusiness = sanitizeText(config?.sourceOfBusiness, '');
   const calendarOptions = sanitizeCalendarOptions(config?.calendarOptions);

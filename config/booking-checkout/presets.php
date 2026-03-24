@@ -26,8 +26,8 @@ if (!defined('ABSPATH')) {
 |   Barefoot reservation type ID used for checkout.
 |
 | 'paymentMode' => string
-|   Barefoot booking mode. Allowed: 'ON', 'TRUE', 'FALSE'
-|   Default is 'ON' for safe checkout testing.
+|   Barefoot payment mode. Allowed: 'ON', 'TRUE', 'FALSE'
+|   Default is 'TRUE' for test-mode checkout.
 |
 | 'portalId' => string
 |   Optional Barefoot portal / source id passed to PropertyBookingNew.
@@ -111,7 +111,7 @@ return [
     'default' => [
         'currency' => '$',
         'reztypeid' => 26,
-        'paymentMode' => 'ON',
+        'paymentMode' => 'TRUE',
         'portalId' => '',
         'sourceOfBusiness' => '',
         'calendarOptions' => [

@@ -15,7 +15,7 @@ class Property_Booking_Checkout_Service
 {
     private const DEFAULT_REZTYPE_ID = 26;
     private const DEFAULT_SESSION_TTL = 1800;
-    private const DEFAULT_PAYMENT_MODE = 'ON';
+    private const DEFAULT_PAYMENT_MODE = 'TRUE';
     private const SESSION_TRANSIENT_PREFIX = 'barefoot_engine_booking_checkout_';
     private const DEFAULT_CONFIRMATION_PATH = '/booking-confirmed';
     private const DEFAULT_CONFIRMATION_ICS_PATH = '/booking-confirmed/ics';
@@ -290,12 +290,13 @@ class Property_Booking_Checkout_Service
      */
     public function start_session(array $payload): array|WP_Error
     {
+        $settings = $this->api_settings->get_settings();
         $property_id = $this->normalize_property_id((string) ($payload['property_id'] ?? ''));
         $check_in = $this->normalize_ymd_date((string) ($payload['check_in'] ?? ''));
         $check_out = $this->normalize_ymd_date((string) ($payload['check_out'] ?? ''));
         $guests = $this->normalize_guest_count($payload['guests'] ?? 1);
         $reztypeid = $this->normalize_positive_int($payload['reztypeid'] ?? self::DEFAULT_REZTYPE_ID, self::DEFAULT_REZTYPE_ID);
-        $payment_mode = $this->normalize_payment_mode((string) ($payload['payment_mode'] ?? self::DEFAULT_PAYMENT_MODE));
+        $payment_mode = $this->resolve_payment_mode($payload['payment_mode'] ?? '', $settings);
         $redirect_url = $this->clean_string($payload['redirect_url'] ?? '/booking-confirmation');
         $existing_session_token = sanitize_text_field((string) ($payload['existing_session_token'] ?? ''));
         $portal_id = sanitize_text_field((string) ($payload['portal_id'] ?? ''));
@@ -413,13 +414,14 @@ class Property_Booking_Checkout_Service
      */
     public function create_session(array $payload): array|WP_Error
     {
+        $settings = $this->api_settings->get_settings();
         $property_id = $this->normalize_property_id((string) ($payload['property_id'] ?? ''));
         $check_in = $this->normalize_ymd_date((string) ($payload['check_in'] ?? ''));
         $check_out = $this->normalize_ymd_date((string) ($payload['check_out'] ?? ''));
         $session_token = sanitize_text_field((string) ($payload['session_token'] ?? ''));
         $guests = $this->normalize_guest_count($payload['guests'] ?? 1);
         $reztypeid = $this->normalize_positive_int($payload['reztypeid'] ?? self::DEFAULT_REZTYPE_ID, self::DEFAULT_REZTYPE_ID);
-        $payment_mode = $this->normalize_payment_mode($payload['payment_mode'] ?? self::DEFAULT_PAYMENT_MODE);
+        $payment_mode = $this->resolve_payment_mode($payload['payment_mode'] ?? '', $settings);
         $portal_id = sanitize_text_field((string) ($payload['portal_id'] ?? ''));
         $source_of_business = sanitize_text_field((string) ($payload['source_of_business'] ?? ''));
 
@@ -485,7 +487,7 @@ class Property_Booking_Checkout_Service
             }
         }
 
-        if ($this->is_mock_mode_enabled()) {
+        if ($this->is_mock_mode_enabled($settings)) {
             if ($session_token === '') {
                 $session_token = $this->generate_session_token();
             }
@@ -530,7 +532,6 @@ class Property_Booking_Checkout_Service
             );
         }
 
-        $settings = $this->api_settings->get_settings();
         if (!$this->api_settings->has_required_credentials($settings)) {
             return new WP_Error(
                 'barefoot_engine_checkout_missing_credentials',
@@ -882,11 +883,12 @@ class Property_Booking_Checkout_Service
             return $payment_details;
         }
 
-        if ($this->is_mock_mode_enabled()) {
+        $settings = $this->api_settings->get_settings();
+
+        if ($this->is_mock_mode_enabled($settings)) {
             return $this->complete_mock_checkout_session($session_token, $session, $payment_details, $booking_record_id);
         }
 
-        $settings = $this->api_settings->get_settings();
         if (!$this->api_settings->has_required_credentials($settings)) {
             return new WP_Error(
                 'barefoot_engine_checkout_missing_credentials',
@@ -1271,13 +1273,28 @@ class Property_Booking_Checkout_Service
         ];
     }
 
-    private function normalize_payment_mode(string $value): string
+    private function normalize_payment_mode(string $value, string $fallback = self::DEFAULT_PAYMENT_MODE): string
     {
         $normalized = strtoupper(trim($value));
 
         return in_array($normalized, ['ON', 'TRUE', 'FALSE'], true)
             ? $normalized
-            : self::DEFAULT_PAYMENT_MODE;
+            : $fallback;
+    }
+
+    /**
+     * @param array<string, mixed>|null $settings
+     */
+    private function resolve_payment_mode(mixed $value, ?array $settings = null): string
+    {
+        if (is_scalar($value)) {
+            $raw = trim((string) $value);
+            if ($raw !== '') {
+                return $this->normalize_payment_mode($raw, $this->get_default_payment_mode($settings));
+            }
+        }
+
+        return $this->get_default_payment_mode($settings);
     }
 
     /**
@@ -1908,9 +1925,22 @@ class Property_Booking_Checkout_Service
         return hash('sha256', $session_token);
     }
 
-    private function is_mock_mode_enabled(): bool
+    private function is_mock_mode_enabled(?array $settings = null): bool
     {
-        return (bool) apply_filters('barefoot_engine_booking_checkout_mock_mode', true);
+        $enabled = $this->api_settings->is_booking_mock_mode_enabled($settings);
+
+        return (bool) apply_filters('barefoot_engine_booking_checkout_mock_mode', $enabled, $settings);
+    }
+
+    /**
+     * @param array<string, mixed>|null $settings
+     */
+    private function get_default_payment_mode(?array $settings = null): string
+    {
+        return $this->normalize_payment_mode(
+            $this->api_settings->get_booking_payment_mode($settings),
+            self::DEFAULT_PAYMENT_MODE
+        );
     }
 
     /**

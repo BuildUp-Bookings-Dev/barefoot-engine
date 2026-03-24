@@ -78,6 +78,10 @@ export default function apiIntegrationForm() {
       username: '',
       company_id: '',
     },
+    booking: {
+      mock_mode: false,
+      payment_mode: 'TRUE',
+    },
     passwordInput: '',
     hasPassword: false,
     showPassword: false,
@@ -103,6 +107,20 @@ export default function apiIntegrationForm() {
         typeof data.company_id === 'string' ? data.company_id : '';
       this.hasPassword = Boolean(data.has_password);
       this.passwordInput = '';
+
+      const booking =
+        bootstrap &&
+        bootstrap.apiIntegration &&
+        bootstrap.apiIntegration.booking &&
+        typeof bootstrap.apiIntegration.booking === 'object'
+          ? bootstrap.apiIntegration.booking
+          : {};
+
+      this.booking.mock_mode = Boolean(booking.mock_mode);
+      this.booking.payment_mode =
+        typeof booking.payment_mode === 'string' && ['TRUE', 'FALSE', 'ON'].includes(booking.payment_mode.toUpperCase())
+          ? booking.payment_mode.toUpperCase()
+          : 'TRUE';
     },
     clearFieldError(field) {
       if (Object.prototype.hasOwnProperty.call(this.fieldErrors, field)) {
@@ -123,6 +141,10 @@ export default function apiIntegrationForm() {
             company_id: this.api.company_id,
             password: this.passwordInput,
           },
+          booking: {
+            mock_mode: this.booking.mock_mode,
+            payment_mode: this.booking.payment_mode,
+          },
         };
 
         const response = await requestJson('api-integration', {
@@ -140,6 +162,15 @@ export default function apiIntegrationForm() {
           }
 
           this.hasPassword = Boolean(api.has_password);
+        }
+
+        if (response && response.data && response.data.booking) {
+          const booking = response.data.booking;
+          this.booking.mock_mode = Boolean(booking.mock_mode);
+          this.booking.payment_mode =
+            typeof booking.payment_mode === 'string' && ['TRUE', 'FALSE', 'ON'].includes(booking.payment_mode.toUpperCase())
+              ? booking.payment_mode.toUpperCase()
+              : 'TRUE';
         }
 
         this.passwordInput = '';

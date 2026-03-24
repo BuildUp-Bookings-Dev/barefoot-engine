@@ -87,7 +87,16 @@ class Property_Booking_Service
         }
 
         $settings = $this->api_settings->get_settings();
+        $mock_mode = $this->is_mock_mode_enabled($settings);
         if (!$this->api_settings->has_required_credentials($settings)) {
+            if ($mock_mode) {
+                return $this->build_mock_calendar_payload(
+                    $normalized_property_id,
+                    $normalized_month_start,
+                    $normalized_month_end
+                );
+            }
+
             return new WP_Error(
                 'barefoot_engine_booking_missing_credentials',
                 __('Please save your Barefoot API credentials first.', 'barefoot-engine'),
@@ -102,6 +111,7 @@ class Property_Booking_Service
                 'property_id' => $normalized_property_id,
                 'month_start' => $normalized_month_start,
                 'month_end' => $normalized_month_end,
+                'mock_mode' => $mock_mode ? 1 : 0,
             ]
         );
         $cached_payload = get_transient($cache_key);
@@ -112,6 +122,17 @@ class Property_Booking_Service
             ];
 
             return $cached_payload;
+        }
+
+        if ($mock_mode) {
+            $payload = $this->build_mock_calendar_payload(
+                $normalized_property_id,
+                $normalized_month_start,
+                $normalized_month_end
+            );
+            set_transient($cache_key, $payload, $this->get_calendar_cache_ttl());
+
+            return $payload;
         }
 
         $response = $this->api_client->fetch_property_booking_date_xml(
@@ -194,7 +215,18 @@ class Property_Booking_Service
         $resolved_reztypeid = $reztypeid !== null && $reztypeid > 0 ? (int) $reztypeid : self::DEFAULT_REZTYPE_ID;
 
         $settings = $this->api_settings->get_settings();
+        $mock_mode = $this->is_mock_mode_enabled($settings);
         if (!$this->api_settings->has_required_credentials($settings)) {
+            if ($mock_mode) {
+                return $this->build_mock_quote_payload(
+                    $normalized_property_id,
+                    $normalized_check_in,
+                    $normalized_check_out,
+                    $normalized_guests,
+                    $resolved_reztypeid
+                );
+            }
+
             return new WP_Error(
                 'barefoot_engine_booking_missing_credentials',
                 __('Please save your Barefoot API credentials first.', 'barefoot-engine'),
@@ -211,6 +243,7 @@ class Property_Booking_Service
                 'check_out' => $normalized_check_out,
                 'guests' => $normalized_guests,
                 'reztypeid' => $resolved_reztypeid,
+                'mock_mode' => $mock_mode ? 1 : 0,
             ]
         );
         $cached_payload = get_transient($cache_key);
@@ -221,6 +254,19 @@ class Property_Booking_Service
             ];
 
             return $cached_payload;
+        }
+
+        if ($mock_mode) {
+            $payload = $this->build_mock_quote_payload(
+                $normalized_property_id,
+                $normalized_check_in,
+                $normalized_check_out,
+                $normalized_guests,
+                $resolved_reztypeid
+            );
+            set_transient($cache_key, $payload, $this->get_quote_cache_ttl());
+
+            return $payload;
         }
 
         $is_available = $this->api_client->is_property_availability(
@@ -357,6 +403,87 @@ class Property_Booking_Service
         return $payload;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function build_mock_calendar_payload(string $property_id, string $month_start, string $month_end): array
+    {
+        return [
+            'property_id' => $property_id,
+            'month_start' => $month_start,
+            'month_end' => $month_end,
+            'blocked_ranges' => [],
+            'disabled_dates' => [],
+            'daily_prices' => $this->build_daily_prices($property_id, $month_start, $month_end),
+            'cache' => [
+                'hit' => false,
+                'fetched_at' => time(),
+            ],
+            'mock_mode' => true,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function build_mock_quote_payload(
+        string $property_id,
+        string $check_in,
+        string $check_out,
+        int $guests,
+        int $reztypeid
+    ): array {
+        $nights = max(1, $this->calculate_date_diff_days($check_in, $check_out));
+        $subtotal = $this->calculate_mock_stay_subtotal($property_id, $check_in, $check_out);
+        $totals = [
+            'daily_price' => $this->normalize_money($subtotal / $nights),
+            'subtotal' => $this->normalize_money($subtotal),
+            'tax_total' => 0.0,
+            'grand_total' => $this->normalize_money($subtotal),
+            'nights' => $nights,
+        ];
+        $line_items = $subtotal > 0
+            ? [
+                [
+                    'name' => __('Rent', 'barefoot-engine'),
+                    'amount' => $totals['subtotal'],
+                ],
+            ]
+            : [];
+        $payment_schedule = $totals['grand_total'] > 0
+            ? [
+                [
+                    'label' => __('Mock payment due now', 'barefoot-engine'),
+                    'amount' => $totals['grand_total'],
+                    'due_date' => $check_in,
+                ],
+            ]
+            : [];
+
+        return [
+            'property_id' => $property_id,
+            'check_in' => $check_in,
+            'check_out' => $check_out,
+            'guests' => $guests,
+            'reztypeid' => $reztypeid,
+            'available' => true,
+            'status' => 'available',
+            'line_items' => $line_items,
+            'totals' => $totals,
+            'payment_schedule' => $payment_schedule,
+            'deposit_amount' => $totals['grand_total'],
+            'payable_amount' => $totals['grand_total'],
+            'paymentSchedule' => $payment_schedule,
+            'depositAmount' => $totals['grand_total'],
+            'payableAmount' => $totals['grand_total'],
+            'cache' => [
+                'hit' => false,
+                'fetched_at' => time(),
+            ],
+            'mock_mode' => true,
+        ];
+    }
+
     private function normalize_property_id(string $property_id): string
     {
         return trim(sanitize_text_field($property_id));
@@ -476,6 +603,38 @@ class Property_Booking_Service
         }
 
         return $prices;
+    }
+
+    private function calculate_mock_stay_subtotal(string $property_id, string $check_in, string $check_out): float
+    {
+        $rates = $this->load_property_rates($property_id);
+        if ($rates === []) {
+            return 0.0;
+        }
+
+        $cursor = \DateTimeImmutable::createFromFormat('!Y-m-d', $check_in, wp_timezone());
+        $departure = \DateTimeImmutable::createFromFormat('!Y-m-d', $check_out, wp_timezone());
+        if (!$cursor instanceof \DateTimeImmutable || !$departure instanceof \DateTimeImmutable || $departure <= $cursor) {
+            return 0.0;
+        }
+
+        $subtotal = 0.0;
+
+        while ($cursor < $departure) {
+            $target_date = $cursor->format('Y-m-d');
+            $rate = $this->find_matching_rate_for_date($rates, $target_date);
+
+            if (is_array($rate)) {
+                $amount = $this->normalize_rate_amount($rate['amount'] ?? $rate['rent'] ?? null);
+                if ($amount !== null && $amount > 0) {
+                    $subtotal += $amount;
+                }
+            }
+
+            $cursor = $cursor->modify('+1 day');
+        }
+
+        return $this->normalize_money($subtotal);
     }
 
     /**
@@ -875,5 +1034,13 @@ class Property_Booking_Service
             60,
             (int) apply_filters('barefoot_engine_booking_quote_cache_ttl', self::DEFAULT_QUOTE_CACHE_TTL)
         );
+    }
+
+    /**
+     * @param array<string, mixed>|null $settings
+     */
+    private function is_mock_mode_enabled(?array $settings = null): bool
+    {
+        return $this->api_settings->is_booking_mock_mode_enabled($settings);
     }
 }

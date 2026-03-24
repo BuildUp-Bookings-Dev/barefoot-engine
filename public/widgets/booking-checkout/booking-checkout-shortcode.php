@@ -4,6 +4,7 @@ namespace BarefootEngine\Widgets\BookingCheckout;
 
 use BarefootEngine\Properties\Property_Booking_Checkout_Service;
 use BarefootEngine\Properties\Property_Post_Type;
+use BarefootEngine\Services\Api_Integration_Settings;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -26,13 +27,16 @@ class Booking_Checkout_Shortcode
 
     private Booking_Checkout_Preset_Registry $preset_registry;
     private Property_Booking_Checkout_Service $checkout_service;
+    private Api_Integration_Settings $api_settings;
 
     public function __construct(
         ?Booking_Checkout_Preset_Registry $preset_registry = null,
-        ?Property_Booking_Checkout_Service $checkout_service = null
+        ?Property_Booking_Checkout_Service $checkout_service = null,
+        ?Api_Integration_Settings $api_settings = null
     ) {
         $this->preset_registry = $preset_registry ?? new Booking_Checkout_Preset_Registry();
         $this->checkout_service = $checkout_service ?? new Property_Booking_Checkout_Service();
+        $this->api_settings = $api_settings ?? new Api_Integration_Settings();
     }
 
     public function register(): void
@@ -62,6 +66,7 @@ class Booking_Checkout_Shortcode
             $attributes,
             $raw_attributes
         );
+        $config['paymentMode'] = $this->api_settings->get_booking_payment_mode();
 
         $resolved_property_id = $this->resolve_property_id($attribute_property_id);
         $config['propertyId'] = $resolved_property_id;

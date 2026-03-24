@@ -16,7 +16,7 @@ class Booking_Checkout_Preset_Registry
     private const FALLBACK_PRESET = [
         'currency' => '$',
         'reztypeid' => 26,
-        'paymentMode' => 'ON',
+        'paymentMode' => 'TRUE',
         'portalId' => '',
         'sourceOfBusiness' => '',
         'calendarOptions' => [
@@ -386,7 +386,7 @@ class Booking_Checkout_Preset_Registry
     {
         $normalized = strtoupper(trim((string) $value));
 
-        return in_array($normalized, ['ON', 'TRUE', 'FALSE'], true) ? $normalized : 'ON';
+        return in_array($normalized, ['ON', 'TRUE', 'FALSE'], true) ? $normalized : 'TRUE';
     }
 
     /**
