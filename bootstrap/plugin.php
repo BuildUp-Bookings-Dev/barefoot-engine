@@ -75,6 +75,7 @@ class Plugin
     private function define_public_hooks(): void
     {
         $public = new Frontend();
+        $booking_confirmation_page = new Booking_Confirmation_Page($this->get_property_booking_checkout_service());
         $featured_properties_elementor = new Featured_Properties_Elementor();
         $listings_preset_registry = new Listings_Preset_Registry();
         $search_preset_registry = new Search_Widget_Preset_Registry();
@@ -101,10 +102,16 @@ class Plugin
         $this->loader->add_action('init', $booking_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $booking_checkout_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $pricing_table_shortcode, 'register', 10, 0);
+        $this->loader->add_action('init', $booking_confirmation_page, 'register_rewrite_rules', 10, 0);
         $this->loader->add_action('plugins_loaded', $featured_properties_elementor, 'register', 20, 0);
         $this->loader->add_action('wp_enqueue_scripts', $public, 'enqueue_assets');
         $this->loader->add_action('wp_head', $public, 'render_custom_css', 20, 0);
+        $this->loader->add_action('template_redirect', $booking_confirmation_page, 'maybe_handle_ics_download', 0, 0);
+        $this->loader->add_filter('query_vars', $booking_confirmation_page, 'register_query_vars', 10, 1);
         $this->loader->add_filter('script_loader_tag', $public, 'mark_module_scripts', 10, 3);
+        $this->loader->add_filter('template_include', $booking_confirmation_page, 'maybe_use_confirmation_template', 20, 1);
+        $this->loader->add_filter('document_title_parts', $booking_confirmation_page, 'filter_document_title_parts', 10, 1);
+        $this->loader->add_filter('body_class', $booking_confirmation_page, 'filter_body_class', 10, 1);
     }
 
     private function define_rest_hooks(): void

@@ -31,6 +31,7 @@ class Property_Booking_Records
     private const META_GUEST_DETAILS = '_be_booking_guest_details';
     private const META_TOTALS = '_be_booking_totals';
     private const META_PAYMENT_SCHEDULE = '_be_booking_payment_schedule';
+    private const META_DEPOSIT_AMOUNT = '_be_booking_deposit_amount';
     private const META_PAYABLE_AMOUNT = '_be_booking_payable_amount';
     private const META_LEASE_ID = '_be_booking_lease_id';
     private const META_TENANT_ID = '_be_booking_tenant_id';
@@ -40,6 +41,7 @@ class Property_Booking_Records
     private const META_DIAGNOSTICS = '_be_booking_diagnostics';
     private const META_EVENTS = '_be_booking_events';
     private const META_SESSION_TOKEN_HASH = '_be_booking_session_token_hash';
+    private const META_CONFIRMATION_TOKEN_HASH = '_be_booking_confirmation_token_hash';
     private static bool $admin_styles_printed = false;
 
     /**
@@ -206,6 +208,10 @@ class Property_Booking_Records
             );
         }
 
+        if (array_key_exists('deposit_amount', $updates) && is_numeric($updates['deposit_amount'])) {
+            update_post_meta($post_id, self::META_DEPOSIT_AMOUNT, $this->normalize_money((float) $updates['deposit_amount']));
+        }
+
         if (array_key_exists('payable_amount', $updates) && is_numeric($updates['payable_amount'])) {
             update_post_meta($post_id, self::META_PAYABLE_AMOUNT, $this->normalize_money((float) $updates['payable_amount']));
         }
@@ -244,6 +250,10 @@ class Property_Booking_Records
 
         if (array_key_exists('session_token_hash', $updates)) {
             update_post_meta($post_id, self::META_SESSION_TOKEN_HASH, $this->clean_string($updates['session_token_hash']));
+        }
+
+        if (array_key_exists('confirmation_token_hash', $updates)) {
+            update_post_meta($post_id, self::META_CONFIRMATION_TOKEN_HASH, $this->clean_string($updates['confirmation_token_hash']));
         }
 
         if ($event_label !== '') {
@@ -385,6 +395,10 @@ class Property_Booking_Records
                 'value' => (string) ((int) get_post_meta($post_id, self::META_TENANT_ID, true)),
             ],
             [
+                'label' => __('Deposit Amount', 'barefoot-engine'),
+                'value' => $this->format_money_meta($post_id, self::META_DEPOSIT_AMOUNT),
+            ],
+            [
                 'label' => __('Payable Amount', 'barefoot-engine'),
                 'value' => $this->format_money_meta($post_id, self::META_PAYABLE_AMOUNT),
             ],
@@ -456,6 +470,7 @@ class Property_Booking_Records
             __('Rent', 'barefoot-engine') => is_array($totals) ? ($totals['daily_price'] ?? '') : '',
             __('Subtotal', 'barefoot-engine') => is_array($totals) ? ($totals['subtotal'] ?? '') : '',
             __('Tax', 'barefoot-engine') => is_array($totals) ? ($totals['tax_total'] ?? '') : '',
+            __('Deposit Amount', 'barefoot-engine') => get_post_meta($post_id, self::META_DEPOSIT_AMOUNT, true),
             __('Total', 'barefoot-engine') => is_array($totals) ? ($totals['grand_total'] ?? '') : '',
             __('Nights', 'barefoot-engine') => is_array($totals) ? ($totals['nights'] ?? '') : '',
         ];
@@ -532,6 +547,73 @@ class Property_Booking_Records
         ];
 
         update_post_meta($post_id, self::META_EVENTS, array_values($events));
+    }
+
+    public function find_record_by_confirmation_token_hash(string $token_hash): int
+    {
+        $normalized_hash = $this->clean_string($token_hash);
+        if ($normalized_hash === '') {
+            return 0;
+        }
+
+        $query = new \WP_Query(
+            [
+                'post_type' => self::POST_TYPE,
+                'post_status' => 'publish',
+                'posts_per_page' => 1,
+                'fields' => 'ids',
+                'no_found_rows' => true,
+                'meta_query' => [
+                    [
+                        'key' => self::META_CONFIRMATION_TOKEN_HASH,
+                        'value' => $normalized_hash,
+                        'compare' => '=',
+                    ],
+                ],
+            ]
+        );
+
+        if (!is_array($query->posts) || $query->posts === []) {
+            return 0;
+        }
+
+        return (int) $query->posts[0];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function get_record_snapshot(int $post_id): array
+    {
+        if ($post_id <= 0) {
+            return [];
+        }
+
+        return [
+            'post_id' => $post_id,
+            'status' => $this->get_meta_string($post_id, self::META_STATUS),
+            'property_id' => $this->get_meta_string($post_id, self::META_PROPERTY_ID),
+            'property_post_id' => (int) get_post_meta($post_id, self::META_PROPERTY_POST_ID, true),
+            'check_in' => $this->get_meta_string($post_id, self::META_CHECK_IN),
+            'check_out' => $this->get_meta_string($post_id, self::META_CHECK_OUT),
+            'guests' => (int) get_post_meta($post_id, self::META_GUESTS, true),
+            'reztypeid' => (int) get_post_meta($post_id, self::META_REZTYPEID, true),
+            'payment_mode' => $this->get_meta_string($post_id, self::META_PAYMENT_MODE),
+            'portal_id' => $this->get_meta_string($post_id, self::META_PORTAL_ID),
+            'property_summary' => get_post_meta($post_id, self::META_PROPERTY_SUMMARY, true),
+            'guest_details' => get_post_meta($post_id, self::META_GUEST_DETAILS, true),
+            'totals' => get_post_meta($post_id, self::META_TOTALS, true),
+            'payment_schedule' => get_post_meta($post_id, self::META_PAYMENT_SCHEDULE, true),
+            'deposit_amount' => get_post_meta($post_id, self::META_DEPOSIT_AMOUNT, true),
+            'payable_amount' => get_post_meta($post_id, self::META_PAYABLE_AMOUNT, true),
+            'lease_id' => (int) get_post_meta($post_id, self::META_LEASE_ID, true),
+            'tenant_id' => (int) get_post_meta($post_id, self::META_TENANT_ID, true),
+            'folio_id' => $this->get_meta_string($post_id, self::META_FOLIO_ID),
+            'amount' => get_post_meta($post_id, self::META_AMOUNT, true),
+            'payment_summary' => get_post_meta($post_id, self::META_PAYMENT_SUMMARY, true),
+            'diagnostics' => get_post_meta($post_id, self::META_DIAGNOSTICS, true),
+            'confirmation_token_hash' => $this->get_meta_string($post_id, self::META_CONFIRMATION_TOKEN_HASH),
+        ];
     }
 
     private function render_admin_styles_once(): void

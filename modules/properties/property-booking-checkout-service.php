@@ -17,6 +17,8 @@ class Property_Booking_Checkout_Service
     private const DEFAULT_SESSION_TTL = 1800;
     private const DEFAULT_PAYMENT_MODE = 'ON';
     private const SESSION_TRANSIENT_PREFIX = 'barefoot_engine_booking_checkout_';
+    private const DEFAULT_CONFIRMATION_PATH = '/booking-confirmed';
+    private const DEFAULT_CONFIRMATION_ICS_PATH = '/booking-confirmed/ics';
 
     private Barefoot_Api_Client $api_client;
     private Api_Integration_Settings $api_settings;
@@ -70,6 +72,7 @@ class Property_Booking_Checkout_Service
         $guest_count = $this->resolve_guest_count($post_id, $fields);
         $bedrooms = $this->resolve_bedroom_count($post_id, $fields);
         $bathrooms = $this->resolve_bathroom_count($post_id, $fields);
+        $coordinates = $this->resolve_property_coordinates($fields);
 
         return [
             'postId' => $post_id,
@@ -78,11 +81,206 @@ class Property_Booking_Checkout_Service
             'address' => $address,
             'imageUrl' => $image_url,
             'permalink' => get_permalink($post_id) ?: '',
+            'coordinates' => $coordinates,
             'stats' => [
                 'sleeps' => $guest_count,
                 'bedrooms' => $bedrooms,
                 'bathrooms' => $bathrooms,
             ],
+        ];
+    }
+
+    public function get_confirmation_page_url(string $confirmation_token): string
+    {
+        $normalized_token = sanitize_text_field(trim($confirmation_token));
+        $base_url = home_url(user_trailingslashit(trim(self::DEFAULT_CONFIRMATION_PATH, '/')));
+
+        return add_query_arg(
+            ['confirmation' => $normalized_token],
+            $base_url
+        );
+    }
+
+    /**
+     * @return array<string, mixed>|WP_Error
+     */
+    public function get_confirmation_page_context(string $confirmation_token): array|WP_Error
+    {
+        $normalized_token = sanitize_text_field(trim($confirmation_token));
+        if ($normalized_token === '') {
+            return new WP_Error(
+                'barefoot_engine_confirmation_missing_token',
+                __('A valid booking confirmation link is required.', 'barefoot-engine'),
+                ['status' => 404]
+            );
+        }
+
+        $token_hash = $this->build_confirmation_token_hash($normalized_token);
+        $booking_record_id = $this->booking_records->find_record_by_confirmation_token_hash($token_hash);
+        if ($booking_record_id <= 0) {
+            return new WP_Error(
+                'barefoot_engine_confirmation_not_found',
+                __('This booking confirmation link is invalid or has expired.', 'barefoot-engine'),
+                ['status' => 404]
+            );
+        }
+
+        $record = $this->booking_records->get_record_snapshot($booking_record_id);
+        if ($record === []) {
+            return new WP_Error(
+                'barefoot_engine_confirmation_not_found',
+                __('We could not load this booking confirmation.', 'barefoot-engine'),
+                ['status' => 404]
+            );
+        }
+
+        if (($record['status'] ?? '') !== Property_Booking_Records::STATUS_BOOKING_SUCCESS) {
+            return new WP_Error(
+                'barefoot_engine_confirmation_not_ready',
+                __('This booking confirmation is not available yet.', 'barefoot-engine'),
+                ['status' => 410]
+            );
+        }
+
+        $property_summary = $this->resolve_confirmation_property_summary($record);
+        $check_in = $this->normalize_ymd_date((string) ($record['check_in'] ?? ''));
+        $check_out = $this->normalize_ymd_date((string) ($record['check_out'] ?? ''));
+        $nights = max(1, $this->calculate_date_diff_days($check_in, $check_out));
+        $guests = $this->normalize_guest_count($record['guests'] ?? 1);
+        $totals = is_array($record['totals'] ?? null) ? $record['totals'] : [];
+        $payment_schedule = is_array($record['payment_schedule'] ?? null) ? $record['payment_schedule'] : [];
+        $deposit_amount = isset($record['deposit_amount']) && is_numeric($record['deposit_amount'])
+            ? $this->normalize_money((float) $record['deposit_amount'])
+            : $this->resolve_deposit_amount($payment_schedule, $totals);
+        $payable_amount = isset($record['payable_amount']) && is_numeric($record['payable_amount'])
+            ? $this->normalize_money((float) $record['payable_amount'])
+            : $this->resolve_payable_amount($payment_schedule, $totals, $deposit_amount);
+        $coordinates = $this->extract_confirmation_coordinates($property_summary);
+        $property_title = $this->clean_string($property_summary['title'] ?? __('Property', 'barefoot-engine'));
+        $property_address = $this->clean_string($property_summary['address'] ?? '');
+        $folio_id = $this->clean_string($record['folio_id'] ?? '');
+
+        $context = [
+            'valid' => true,
+            'bookingRecordId' => $booking_record_id,
+            'folioId' => $folio_id,
+            'property' => [
+                'title' => $property_title,
+                'address' => $property_address,
+                'imageUrl' => $this->clean_string($property_summary['imageUrl'] ?? ''),
+                'permalink' => $this->clean_string($property_summary['permalink'] ?? ''),
+                'stats' => is_array($property_summary['stats'] ?? null) ? $property_summary['stats'] : [],
+            ],
+            'stay' => [
+                'checkIn' => $check_in,
+                'checkOut' => $check_out,
+                'checkInDisplay' => $this->format_confirmation_display_date($check_in),
+                'checkOutDisplay' => $this->format_confirmation_display_date($check_out),
+                'nights' => $nights,
+                'nightsLabel' => sprintf(
+                    /* translators: %d is the number of nights booked. */
+                    _n('%d night', '%d nights', $nights, 'barefoot-engine'),
+                    $nights
+                ),
+                'guests' => $guests,
+                'guestsLabel' => sprintf(
+                    /* translators: %d is the number of guests in the booking. */
+                    _n('%d guest', '%d guests', $guests, 'barefoot-engine'),
+                    $guests
+                ),
+            ],
+            'payments' => [
+                'rent' => isset($totals['subtotal']) && is_numeric($totals['subtotal'])
+                    ? $this->normalize_money((float) $totals['subtotal'])
+                    : 0.0,
+                'tax' => isset($totals['tax_total']) && is_numeric($totals['tax_total'])
+                    ? $this->normalize_money((float) $totals['tax_total'])
+                    : 0.0,
+                'deposit' => $deposit_amount,
+                'total' => isset($totals['grand_total']) && is_numeric($totals['grand_total'])
+                    ? $this->normalize_money((float) $totals['grand_total'])
+                    : 0.0,
+                'payable' => $payable_amount,
+                'charged' => isset($record['amount']) && is_numeric($record['amount'])
+                    ? $this->normalize_money((float) $record['amount'])
+                    : 0.0,
+                'rentLabel' => __('Rent', 'barefoot-engine'),
+                'taxLabel' => __('Local and State Taxes', 'barefoot-engine'),
+                'depositLabel' => __('Deposit Amount', 'barefoot-engine'),
+                'totalLabel' => __('Total', 'barefoot-engine'),
+                'payableLabel' => __('Payable Amount', 'barefoot-engine'),
+            ],
+            'map' => [
+                'available' => $coordinates !== null,
+                'embedUrl' => $coordinates !== null
+                    ? $this->build_confirmation_map_embed_url($coordinates['lat'], $coordinates['lng'])
+                    : '',
+                'lat' => $coordinates['lat'] ?? null,
+                'lng' => $coordinates['lng'] ?? null,
+            ],
+            'calendar' => $this->build_confirmation_calendar_links(
+                $normalized_token,
+                $property_title,
+                $property_address,
+                $check_in,
+                $check_out,
+                $folio_id
+            ),
+            'paymentSummary' => is_array($record['payment_summary'] ?? null) ? $record['payment_summary'] : [],
+        ];
+
+        return $context;
+    }
+
+    /**
+     * @return array{filename: string, content: string}|WP_Error
+     */
+    public function get_confirmation_ics_payload(string $confirmation_token): array|WP_Error
+    {
+        $context = $this->get_confirmation_page_context($confirmation_token);
+        if (is_wp_error($context)) {
+            return $context;
+        }
+
+        $property = is_array($context['property'] ?? null) ? $context['property'] : [];
+        $stay = is_array($context['stay'] ?? null) ? $context['stay'] : [];
+        $folio_id = $this->clean_string($context['folioId'] ?? '');
+        $title = $this->clean_string($property['title'] ?? __('Property', 'barefoot-engine'));
+        $address = $this->clean_string($property['address'] ?? '');
+        $check_in = $this->clean_string($stay['checkIn'] ?? '');
+        $check_out = $this->clean_string($stay['checkOut'] ?? '');
+        $uid_suffix = preg_replace('/[^a-z0-9]+/i', '-', strtolower($title)) ?: 'booking';
+        $uid = sprintf('barefoot-engine-%s-%s@%s', $uid_suffix, $this->build_confirmation_token_hash($confirmation_token), wp_parse_url(home_url(), PHP_URL_HOST) ?: 'localhost');
+        $description = $folio_id !== ''
+            ? sprintf(
+                /* translators: %s is the reservation folio id. */
+                __('Reservation ID: %s', 'barefoot-engine'),
+                $folio_id
+            )
+            : __('Booking confirmation', 'barefoot-engine');
+        $content = $this->build_ics_content(
+            [
+                'uid' => $uid,
+                'title' => sprintf(
+                    /* translators: %s is the property title. */
+                    __('Stay at %s', 'barefoot-engine'),
+                    $title
+                ),
+                'description' => $description,
+                'location' => $address,
+                'check_in' => $check_in,
+                'check_out' => $check_out,
+            ]
+        );
+        $filename = sanitize_file_name(sprintf(
+            'booking-%s-%s.ics',
+            $uid_suffix,
+            $check_in !== '' ? str_replace('-', '', $check_in) : gmdate('Ymd')
+        ));
+
+        return [
+            'filename' => $filename,
+            'content' => $content,
         ];
     }
 
@@ -785,6 +983,16 @@ class Property_Booking_Checkout_Service
         }
 
         $payment_summary = $this->build_masked_payment_summary($payment_details, $booking_result);
+        $confirmation_token = '';
+        $confirmation_url = '';
+        $confirmation_token_hash = '';
+
+        if ($booking_record_id > 0) {
+            $confirmation_token = $this->generate_confirmation_token();
+            $confirmation_token_hash = $this->build_confirmation_token_hash($confirmation_token);
+            $confirmation_url = $this->get_confirmation_page_url($confirmation_token);
+        }
+
         if ($booking_record_id > 0) {
             $this->booking_records->update_record(
                 $booking_record_id,
@@ -797,9 +1005,11 @@ class Property_Booking_Checkout_Service
                     'payment_summary' => $payment_summary,
                     'totals' => isset($session['totals']) && is_array($session['totals']) ? $session['totals'] : [],
                     'payment_schedule' => isset($session['payment_schedule']) && is_array($session['payment_schedule']) ? $session['payment_schedule'] : [],
+                    'deposit_amount' => $deposit_amount,
                     'payable_amount' => $payable_amount,
                     'lease_id' => $lease_id,
                     'tenant_id' => $tenant_id,
+                    'confirmation_token_hash' => $confirmation_token_hash,
                     'diagnostics' => [
                         'booking_response' => 'received',
                     ],
@@ -830,6 +1040,8 @@ class Property_Booking_Checkout_Service
             'payableAmount' => $this->normalize_money($payable_amount),
             'depositAmount' => $this->normalize_money($deposit_amount),
             'bookingRecordId' => $booking_record_id > 0 ? $booking_record_id : null,
+            'confirmationToken' => $confirmation_token !== '' ? $confirmation_token : null,
+            'confirmationUrl' => $confirmation_url,
         ];
     }
 
@@ -1375,6 +1587,28 @@ class Property_Booking_Checkout_Service
         return '';
     }
 
+    /**
+     * @return array{lat: float, lng: float}|null
+     */
+    private function resolve_property_coordinates(array $fields): ?array
+    {
+        $latitude = $this->normalize_coordinate($fields['Latitude'] ?? null, -90, 90);
+        $longitude = $this->normalize_coordinate($fields['Longitude'] ?? null, -180, 180);
+
+        if ($latitude === null || $longitude === null) {
+            return null;
+        }
+
+        if (abs($latitude) < 0.000001 && abs($longitude) < 0.000001) {
+            return null;
+        }
+
+        return [
+            'lat' => $latitude,
+            'lng' => $longitude,
+        ];
+    }
+
     private function resolve_property_image_url(int $post_id, array $fields): string
     {
         $images = get_post_meta($post_id, '_be_property_images', true);
@@ -1413,6 +1647,20 @@ class Property_Booking_Checkout_Service
         }
 
         return '';
+    }
+
+    private function normalize_coordinate(mixed $value, float $min, float $max): ?float
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $number = (float) $value;
+        if ($number < $min || $number > $max) {
+            return null;
+        }
+
+        return $number;
     }
 
     private function resolve_guest_count(int $post_id, array $fields): ?int
@@ -1791,6 +2039,15 @@ class Property_Booking_Checkout_Service
             'amount' => $this->normalize_money($payable_amount),
         ];
         $payment_summary = $this->build_masked_payment_summary($payment_details, $booking_result);
+        $confirmation_token = '';
+        $confirmation_url = '';
+        $confirmation_token_hash = '';
+
+        if ($booking_record_id > 0) {
+            $confirmation_token = $this->generate_confirmation_token();
+            $confirmation_token_hash = $this->build_confirmation_token_hash($confirmation_token);
+            $confirmation_url = $this->get_confirmation_page_url($confirmation_token);
+        }
 
         if ($booking_record_id > 0) {
             $this->booking_records->update_record(
@@ -1802,9 +2059,11 @@ class Property_Booking_Checkout_Service
                     'payment_summary' => $payment_summary,
                     'totals' => isset($session['totals']) && is_array($session['totals']) ? $session['totals'] : [],
                     'payment_schedule' => isset($session['payment_schedule']) && is_array($session['payment_schedule']) ? $session['payment_schedule'] : [],
+                    'deposit_amount' => $deposit_amount,
                     'payable_amount' => $payable_amount,
                     'lease_id' => isset($session['lease_id']) ? (int) $session['lease_id'] : 0,
                     'tenant_id' => isset($session['tenant_id']) ? (int) $session['tenant_id'] : 0,
+                    'confirmation_token_hash' => $confirmation_token_hash,
                     'diagnostics' => [
                         'mock_mode' => true,
                         'mock_booking_completion' => true,
@@ -1834,6 +2093,8 @@ class Property_Booking_Checkout_Service
             'payableAmount' => $this->normalize_money($payable_amount),
             'depositAmount' => $this->normalize_money($deposit_amount),
             'bookingRecordId' => $booking_record_id > 0 ? $booking_record_id : null,
+            'confirmationToken' => $confirmation_token !== '' ? $confirmation_token : null,
+            'confirmationUrl' => $confirmation_url,
             'mockMode' => true,
         ];
     }
@@ -1974,6 +2235,213 @@ class Property_Booking_Checkout_Service
         $query['reztypeid'] = (string) $reztypeid;
 
         return add_query_arg($query, $sanitized_target);
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     * @return array<string, mixed>
+     */
+    private function resolve_confirmation_property_summary(array $record): array
+    {
+        $summary = is_array($record['property_summary'] ?? null) ? $record['property_summary'] : [];
+        $property_id = $this->clean_string($record['property_id'] ?? '');
+
+        if ($property_id !== '') {
+            $fresh_summary = $this->get_property_summary($property_id);
+            if (is_array($fresh_summary)) {
+                foreach (['postId', 'propertyId', 'title', 'address', 'imageUrl', 'permalink'] as $key) {
+                    $summary_value = $summary[$key] ?? null;
+                    $clean_summary_value = is_scalar($summary_value) ? $this->clean_string((string) $summary_value) : '';
+                    if ($clean_summary_value === '' && array_key_exists($key, $fresh_summary)) {
+                        $summary[$key] = $fresh_summary[$key];
+                    }
+                }
+
+                if (!is_array($summary['stats'] ?? null) || $summary['stats'] === []) {
+                    $summary['stats'] = $fresh_summary['stats'] ?? [];
+                }
+
+                if (!is_array($summary['coordinates'] ?? null) || $summary['coordinates'] === []) {
+                    $summary['coordinates'] = $fresh_summary['coordinates'] ?? null;
+                }
+            }
+        }
+
+        if (!is_array($summary['stats'] ?? null)) {
+            $summary['stats'] = [];
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @param array<string, mixed> $property_summary
+     * @return array{lat: float, lng: float}|null
+     */
+    private function extract_confirmation_coordinates(array $property_summary): ?array
+    {
+        $coordinates = $property_summary['coordinates'] ?? null;
+        if (is_array($coordinates) && isset($coordinates['lat'], $coordinates['lng'])) {
+            $latitude = $this->normalize_coordinate($coordinates['lat'], -90, 90);
+            $longitude = $this->normalize_coordinate($coordinates['lng'], -180, 180);
+            if ($latitude !== null && $longitude !== null) {
+                return [
+                    'lat' => $latitude,
+                    'lng' => $longitude,
+                ];
+            }
+        }
+
+        $post_id = isset($property_summary['postId']) && is_numeric($property_summary['postId'])
+            ? (int) $property_summary['postId']
+            : 0;
+        if ($post_id <= 0) {
+            return null;
+        }
+
+        $fields = get_post_meta($post_id, '_be_property_fields', true);
+        if (!is_array($fields)) {
+            return null;
+        }
+
+        return $this->resolve_property_coordinates($fields);
+    }
+
+    private function generate_confirmation_token(): string
+    {
+        return wp_generate_password(48, false, false);
+    }
+
+    private function build_confirmation_token_hash(string $confirmation_token): string
+    {
+        return hash('sha256', $this->clean_string($confirmation_token));
+    }
+
+    private function format_confirmation_display_date(string $ymd): string
+    {
+        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $ymd, wp_timezone());
+        if (!$date instanceof \DateTimeImmutable) {
+            return '—';
+        }
+
+        return wp_date('M j, Y', $date->getTimestamp(), wp_timezone());
+    }
+
+    private function build_confirmation_map_embed_url(float $latitude, float $longitude): string
+    {
+        $delta = 0.0125;
+        $bbox = [
+            $longitude - $delta,
+            $latitude - $delta,
+            $longitude + $delta,
+            $latitude + $delta,
+        ];
+
+        return add_query_arg(
+            [
+                'bbox' => implode(',', array_map(static fn(float $value): string => number_format($value, 6, '.', ''), $bbox)),
+                'layer' => 'mapnik',
+                'marker' => number_format($latitude, 6, '.', '') . ',' . number_format($longitude, 6, '.', ''),
+            ],
+            'https://www.openstreetmap.org/export/embed.html'
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function build_confirmation_calendar_links(
+        string $confirmation_token,
+        string $property_title,
+        string $property_address,
+        string $check_in,
+        string $check_out,
+        string $folio_id
+    ): array {
+        $summary = sprintf(
+            /* translators: %s is the property title. */
+            __('Stay at %s', 'barefoot-engine'),
+            $property_title
+        );
+        $description = $folio_id !== ''
+            ? sprintf(
+                /* translators: %s is the folio id. */
+                __('Reservation ID: %s', 'barefoot-engine'),
+                $folio_id
+            )
+            : __('Booking confirmation', 'barefoot-engine');
+        $google_dates = str_replace('-', '', $check_in) . '/' . str_replace('-', '', $check_out);
+        $ics_url = add_query_arg(
+            ['confirmation' => sanitize_text_field($confirmation_token)],
+            home_url(user_trailingslashit(trim(self::DEFAULT_CONFIRMATION_ICS_PATH, '/')))
+        );
+        $google_url = add_query_arg(
+            [
+                'action' => 'TEMPLATE',
+                'text' => $summary,
+                'dates' => $google_dates,
+                'details' => $description,
+                'location' => $property_address,
+            ],
+            'https://calendar.google.com/calendar/render'
+        );
+        $outlook_url = add_query_arg(
+            [
+                'path' => '/calendar/action/compose',
+                'rru' => 'addevent',
+                'allday' => 'true',
+                'subject' => $summary,
+                'startdt' => $check_in,
+                'enddt' => $check_out,
+                'body' => $description,
+                'location' => $property_address,
+            ],
+            'https://outlook.live.com/calendar/0/deeplink/compose'
+        );
+
+        return [
+            'icsUrl' => $ics_url,
+            'googleUrl' => $google_url,
+            'outlookUrl' => $outlook_url,
+        ];
+    }
+
+    /**
+     * @param array<string, string> $event
+     */
+    private function build_ics_content(array $event): string
+    {
+        $created_at = gmdate('Ymd\THis\Z');
+        $start = str_replace('-', '', $this->clean_string($event['check_in'] ?? ''));
+        $end = str_replace('-', '', $this->clean_string($event['check_out'] ?? ''));
+        $lines = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Barefoot Engine//Booking Confirmation//EN',
+            'CALSCALE:GREGORIAN',
+            'METHOD:PUBLISH',
+            'BEGIN:VEVENT',
+            'UID:' . $this->escape_ics_text($this->clean_string($event['uid'] ?? '')),
+            'DTSTAMP:' . $created_at,
+            'DTSTART;VALUE=DATE:' . $start,
+            'DTEND;VALUE=DATE:' . $end,
+            'SUMMARY:' . $this->escape_ics_text($this->clean_string($event['title'] ?? '')),
+            'DESCRIPTION:' . $this->escape_ics_text($this->clean_string($event['description'] ?? '')),
+            'LOCATION:' . $this->escape_ics_text($this->clean_string($event['location'] ?? '')),
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ];
+
+        return implode("\r\n", $lines) . "\r\n";
+    }
+
+    private function escape_ics_text(string $value): string
+    {
+        return str_replace(
+            ["\\", ';', ',', "\r\n", "\r", "\n"],
+            ['\\\\', '\;', '\,', '\n', '\n', '\n'],
+            $value
+        );
     }
 
     /**

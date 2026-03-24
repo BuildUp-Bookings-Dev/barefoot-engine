@@ -1083,10 +1083,16 @@ function completeCheckoutSession(state) {
     })
     .then((response) => {
       const payload = isPlainObject(response?.data) ? response.data : {};
-      renderCheckoutSuccess(state, payload);
       state.sessionToken = '';
       clearBookingSessionCookie();
       syncCheckoutUrlParams(state);
+      const confirmationUrl = sanitizeText(payload?.confirmationUrl, '');
+      if (confirmationUrl) {
+        window.location.assign(confirmationUrl);
+        return;
+      }
+
+      renderCheckoutSuccess(state, payload);
       setCheckoutNotice(state, state.labels.paymentSuccessBody, 'success');
     })
     .catch((error) => {

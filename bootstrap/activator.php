@@ -29,6 +29,7 @@ class Activator
             wp_schedule_single_event(time() + 120, Property_Delta_Refresh_Service::CRON_HOOK);
         }
 
+        Booking_Confirmation_Page::register_rewrite_rules_static();
         flush_rewrite_rules();
     }
 }
