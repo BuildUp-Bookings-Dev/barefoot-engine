@@ -22,11 +22,6 @@ if (!defined('ABSPATH')) {
             </thead>
             <tbody>
                 <tr>
-                    <td><code><?php echo esc_html__('General', 'barefoot-engine'); ?></code></td>
-                    <td><?php echo esc_html__('Manage colors, typography, and custom styling for the site.', 'barefoot-engine'); ?></td>
-                    <td><?php echo esc_html__('Check that saved styling changes appear as expected on the site.', 'barefoot-engine'); ?></td>
-                </tr>
-                <tr>
                     <td><code><?php echo esc_html__('API Integration', 'barefoot-engine'); ?></code></td>
                     <td><?php echo esc_html__('Store the Barefoot login details used by the plugin.', 'barefoot-engine'); ?></td>
                     <td><?php echo esc_html__('Confirm the connection test passes and credentials are valid before syncing data.', 'barefoot-engine'); ?></td>
@@ -40,6 +35,11 @@ if (!defined('ABSPATH')) {
                     <td><code><?php echo esc_html__('Updates', 'barefoot-engine'); ?></code></td>
                     <td><?php echo esc_html__('Check the current plugin version and available updates.', 'barefoot-engine'); ?></td>
                     <td><?php echo esc_html__('Review the latest release details when checking for updates.', 'barefoot-engine'); ?></td>
+                </tr>
+                <tr>
+                    <td><code><?php echo esc_html__('Help', 'barefoot-engine'); ?></code></td>
+                    <td><?php echo esc_html__('Reference the current shortcodes, booking routes, and operational tips.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Use this page when wiring pages in Elementor, troubleshooting booking flows, or checking available widget entry points.', 'barefoot-engine'); ?></td>
                 </tr>
             </tbody>
         </table>
@@ -64,32 +64,61 @@ if (!defined('ABSPATH')) {
         </div>
         <div class="be-columns">
             <h3 class="be-mini-card-heading be-heading"><?php echo esc_html__('Recommended Workflow', 'barefoot-engine'); ?></h3>
-            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Save General settings first, then verify public output, then move to API and property operations.', 'barefoot-engine'); ?></p>
+            <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Confirm API credentials first, then verify public output, then move to property operations.', 'barefoot-engine'); ?></p>
             <p class="be-mini-card-paragraph be-paragraph"><?php echo esc_html__('Run property syncs only after API credentials are confirmed.', 'barefoot-engine'); ?></p>
         </div>
     </article>
 </section>
 
-<section class="be-panel">
-    <div class="be-columns">
+<section class="be-panel be-panel-flush">
+    <div class="be-table-head">
         <h3 class="be-section-title be-heading be-rows">
-            <span class="be-icon material-symbols-outlined" aria-hidden="true">view_carousel</span>
-            <?php echo esc_html__('Featured Properties Shortcode', 'barefoot-engine'); ?>
+            <span class="be-icon material-symbols-outlined" aria-hidden="true">short_stay</span>
+            <?php echo esc_html__('Shortcodes', 'barefoot-engine'); ?>
         </h3>
-        <p class="be-paragraph"><?php echo esc_html__('Use this shortcode to render the featured properties slider.', 'barefoot-engine'); ?></p>
-        <pre style="margin:0;padding:12px;border:1px solid #dcdcde;border-radius:8px;background:#f6f7f7;"><code>[barefoot_featured_properties limit="9"]</code></pre>
-        <p class="be-paragraph"><?php echo esc_html__('Optional attributes: limit and class.', 'barefoot-engine'); ?></p>
     </div>
-</section>
 
-<section class="be-panel">
-    <div class="be-columns">
-        <h3 class="be-section-title be-heading be-rows">
-            <span class="be-icon material-symbols-outlined" aria-hidden="true">tips_and_updates</span>
-            <?php echo esc_html__('Helpful Tips', 'barefoot-engine'); ?>
-        </h3>
-        <p class="be-paragraph"><?php echo esc_html__('After saving settings, refresh the relevant admin screen and a frontend page to confirm the changes.', 'barefoot-engine'); ?></p>
-        <p class="be-paragraph"><?php echo esc_html__('If changes do not appear right away, clear site or builder caches and reload the page.', 'barefoot-engine'); ?></p>
-        <p class="be-paragraph"><?php echo esc_html__('Run another sync after major property updates so the latest information is pulled into WordPress.', 'barefoot-engine'); ?></p>
+    <div class="be-table-wrap">
+        <table class="be-table">
+            <thead>
+                <tr>
+                    <th><?php echo esc_html__('Shortcode', 'barefoot-engine'); ?></th>
+                    <th><?php echo esc_html__('Purpose', 'barefoot-engine'); ?></th>
+                    <th><?php echo esc_html__('Notes', 'barefoot-engine'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>[barefoot_search_widget]</code></td>
+                    <td><?php echo esc_html__('Standalone search entry widget.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Use for homepage or landing-page search entry points.', 'barefoot-engine'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>[barefoot_listings]</code></td>
+                    <td><?php echo esc_html__('Listings results experience with map, filters, and AJAX search.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Use on the main results page such as /properties/.', 'barefoot-engine'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>[barefoot_booking_widget]</code></td>
+                    <td><?php echo esc_html__('Property-page booking widget with availability and quote summary.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Usually used on single property pages.', 'barefoot-engine'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>[barefoot_booking_checkout]</code></td>
+                    <td><?php echo esc_html__('Checkout form for guest details, payment details, and booking summary.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Usually used on /booking-confirmation/.', 'barefoot-engine'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>[barefoot_pricing_table]</code></td>
+                    <td><?php echo esc_html__('Property pricing table with searchable date/rate rows.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Useful on property pages or inside pricing modals.', 'barefoot-engine'); ?></td>
+                </tr>
+                <tr>
+                    <td><code>[barefoot_featured_properties]</code></td>
+                    <td><?php echo esc_html__('Featured properties slider.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Supports the limit attribute and featured-only property output.', 'barefoot-engine'); ?></td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 </section>

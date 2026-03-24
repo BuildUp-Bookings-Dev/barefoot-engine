@@ -18,5 +18,10 @@ Barefoot Engine connects WordPress with the Barefoot API for vacation rental wor
 2. Activate Barefoot Engine.
 
 == Changelog ==
+= 1.0.0 =
+* Production-ready Barefoot property sync, listings, booking widget, checkout, and booking confirmation flows.
+* Featured properties slider and Elementor widget support.
+* AJAX listings search improvements, native sticky/infinite map behavior, and stay-total pricing updates.
+
 = 0.1.0 =
 * Initial scaffold.

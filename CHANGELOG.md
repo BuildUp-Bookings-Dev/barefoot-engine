@@ -5,18 +5,25 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- Added a functional `Updates` admin tab backed by REST and Alpine for live version/release visibility.
+- Added full property sync, partial sync, rate sync, and delta-refresh tooling for Barefoot property data.
+- Added AJAX listings search with map integration, hybrid live availability checks, and stay-total price formatting.
+- Added property booking widget, pricing table, booking checkout flow, booking records, and plugin-owned booking confirmation pages.
+- Added featured properties slider and Elementor widget support.
 - Added changelog automation script (`scripts/changelog.mjs`) to validate, promote, and extract release notes.
 - Added release convenience scripts (`release:patch`, `release:minor`, `release:major`) and changelog validation command.
 
 ### Changed
 - Switched release note source from generated GitHub notes to version sections in `CHANGELOG.md`.
-- Updated release script to enforce clean working tree and `main` branch before publishing.
+- Updated the admin experience around API integration, properties, updates, and help.
+- Updated listings to use GitHub-sourced widget libraries and newer native `bp-listings` capabilities such as infinite scroll and sticky/full-height map behavior.
+- Updated booking confirmation and checkout presentation to use a cleaner plugin-owned flow and template.
 - Updated package script and `.distignore` to ensure installable ZIPs include runtime assets and vendor autoload.
 
 ### Fixed
 - Fixed packaging exclusions that previously dropped required runtime files from release ZIPs.
 - Fixed updater repository constant to point at the public `BuildUp-Bookings-Dev/barefoot-engine` repository.
+- Fixed listings regressions around map layout, search filters, optional fields, dropdown behavior, and stay-total card pricing.
+- Fixed booking summaries to resolve the correct property data, payment schedule deposit amount, and payable amount.
 
 ### Security
 - Added stricter release preflight gates to reduce accidental invalid tags/releases.

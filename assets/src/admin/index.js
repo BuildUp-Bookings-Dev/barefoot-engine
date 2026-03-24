@@ -1,7 +1,6 @@
 import Alpine from 'alpinejs';
 import registerNotifications from './notifications';
 import apiIntegrationForm from './api-integration-form';
-import generalSettingsForm from './general-settings-form';
 import propertiesTab from './properties-tab';
 import updatesTab from './updates-tab';
 
@@ -10,7 +9,6 @@ window.Alpine = Alpine;
 document.addEventListener('alpine:init', () => {
   registerNotifications(Alpine);
   Alpine.data('beApiIntegrationForm', apiIntegrationForm);
-  Alpine.data('beGeneralSettingsForm', generalSettingsForm);
   Alpine.data('bePropertiesTab', propertiesTab);
   Alpine.data('beUpdatesTab', updatesTab);
 });
