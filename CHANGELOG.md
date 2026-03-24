@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [1.0.0] - 2026-03-24
+
+### Added
 - Added full property sync, partial sync, rate sync, and delta-refresh tooling for Barefoot property data.
 - Added AJAX listings search with map integration, hybrid live availability checks, and stay-total price formatting.
 - Added property booking widget, pricing table, booking checkout flow, booking records, and plugin-owned booking confirmation pages.
