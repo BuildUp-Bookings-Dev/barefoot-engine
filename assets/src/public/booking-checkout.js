@@ -37,12 +37,14 @@ function initializeBookingCheckoutWidget(mountNode, config) {
   const statusNode = mountNode.querySelector('.barefoot-engine-booking-checkout__quote-status');
   const noticeNode = mountNode.querySelector('.barefoot-engine-booking-checkout__notice');
   const dailyValueNode = mountNode.querySelector('[data-be-booking-checkout-total="daily"]');
+  const subtotalLabelNode = mountNode.querySelector('[data-be-booking-checkout-label="subtotal"]');
+  const subtotalValueNode = mountNode.querySelector('[data-be-booking-checkout-total="subtotal"]');
   const taxValueNode = mountNode.querySelector('[data-be-booking-checkout-total="tax"]');
   const totalValueNode = mountNode.querySelector('[data-be-booking-checkout-total="grand"]');
   const depositRow = mountNode.querySelector('[data-be-booking-checkout-row="deposit"]');
   const depositValueNode = mountNode.querySelector('[data-be-booking-checkout-total="deposit"]');
+  const payableFooterNode = mountNode.querySelector('[data-be-booking-checkout-row="payable"]');
   const payableValueNode = mountNode.querySelector('[data-be-booking-checkout-total="payable"]');
-  const payableHeadlineNode = mountNode.querySelector('[data-be-booking-checkout-payable-headline]');
   const proceedButton = mountNode.querySelector('[data-be-booking-checkout-action="proceed"]');
   const backButton = mountNode.querySelector('[data-be-booking-checkout-action="back"]');
   const payButton = mountNode.querySelector('[data-be-booking-checkout-action="pay"]');
@@ -74,12 +76,14 @@ function initializeBookingCheckoutWidget(mountNode, config) {
     || !(statusNode instanceof HTMLElement)
     || !(noticeNode instanceof HTMLElement)
     || !(dailyValueNode instanceof HTMLElement)
+    || !(subtotalLabelNode instanceof HTMLElement)
+    || !(subtotalValueNode instanceof HTMLElement)
     || !(taxValueNode instanceof HTMLElement)
     || !(totalValueNode instanceof HTMLElement)
     || !(depositRow instanceof HTMLElement)
     || !(depositValueNode instanceof HTMLElement)
+    || !(payableFooterNode instanceof HTMLElement)
     || !(payableValueNode instanceof HTMLElement)
-    || !(payableHeadlineNode instanceof HTMLElement)
     || !(proceedButton instanceof HTMLButtonElement)
     || !(backButton instanceof HTMLButtonElement)
     || !(payButton instanceof HTMLButtonElement)
@@ -136,12 +140,14 @@ function initializeBookingCheckoutWidget(mountNode, config) {
     statusNode,
     noticeNode,
     dailyValueNode,
+    subtotalLabelNode,
+    subtotalValueNode,
     taxValueNode,
     totalValueNode,
     depositRow,
     depositValueNode,
+    payableFooterNode,
     payableValueNode,
-    payableHeadlineNode,
     proceedButton,
     backButton,
     payButton,
@@ -451,10 +457,6 @@ function buildCheckoutRuntime(config) {
         </div>
         <aside class="barefoot-engine-booking-checkout__sidebar">
           <section class="barefoot-engine-booking-checkout__summary-card">
-            <div class="barefoot-engine-booking-checkout__summary-heading">
-              <span>${escapeHtml(labels.summaryTitle)}</span>
-              <strong data-be-booking-checkout-payable-headline></strong>
-            </div>
             ${renderPropertySummary(propertySummary, labels)}
             <div class="barefoot-engine-booking-checkout__summary-controls">
               <div class="barefoot-engine-booking-checkout__summary-compact-item">
@@ -482,6 +484,10 @@ function buildCheckoutRuntime(config) {
                 <strong data-be-booking-checkout-total="daily"></strong>
               </div>
               <div class="barefoot-engine-booking-checkout__total-row">
+                <span data-be-booking-checkout-label="subtotal">${escapeHtml(labels.subtotal)}</span>
+                <strong data-be-booking-checkout-total="subtotal"></strong>
+              </div>
+              <div class="barefoot-engine-booking-checkout__total-row">
                 <span>${escapeHtml(labels.tax)}</span>
                 <strong data-be-booking-checkout-total="tax"></strong>
               </div>
@@ -493,7 +499,7 @@ function buildCheckoutRuntime(config) {
                 <span>${escapeHtml(labels.total)}</span>
                 <strong data-be-booking-checkout-total="grand"></strong>
               </div>
-              <div class="barefoot-engine-booking-checkout__payable-footer">
+              <div class="barefoot-engine-booking-checkout__payable-footer" data-be-booking-checkout-row="payable">
                 <span>${escapeHtml(labels.payableAmount)}</span>
                 <strong data-be-booking-checkout-total="payable"></strong>
               </div>
@@ -920,11 +926,16 @@ function runCheckoutQuoteCheck(state) {
 
       if (payload.available !== true) {
         renderCheckoutTotals(state, null, null);
+        renderCheckoutPaymentSchedule(state, null);
         setCheckoutStatus(state, 'unavailable', 'error');
         return;
       }
 
-      renderCheckoutTotals(state, payload.totals, null);
+      renderCheckoutTotals(state, payload.totals, payload.payableAmount ?? payload.payable_amount ?? null);
+      renderCheckoutPaymentSchedule(
+        state,
+        payload.depositAmount ?? payload.deposit_amount ?? payload.payableAmount ?? payload.payable_amount ?? null,
+      );
       setCheckoutStatus(state, 'available', 'success');
     })
     .catch((error) => {
@@ -935,6 +946,7 @@ function runCheckoutQuoteCheck(state) {
       console.warn('[barefoot-engine] Booking checkout quote failed.', error);
       state.quoteData = null;
       renderCheckoutTotals(state, null, null);
+      renderCheckoutPaymentSchedule(state, null);
       setCheckoutStatus(state, 'error', 'error');
     });
 }
@@ -975,6 +987,7 @@ function createCheckoutSession(state) {
       portal_id: state.portalId,
       source_of_business: state.sourceOfBusiness,
       guest,
+      quote: state.quoteData,
     }),
   })
     .then(async (response) => {
@@ -1147,23 +1160,31 @@ function renderCheckoutSummaryMeta(state) {
 function renderCheckoutTotals(state, totals, payableAmount) {
   if (!isPlainObject(totals)) {
     state.dailyValueNode.textContent = '';
+    state.subtotalLabelNode.textContent = state.labels.subtotal;
+    state.subtotalValueNode.textContent = '';
     state.taxValueNode.textContent = '';
     state.totalValueNode.textContent = '';
     state.payableValueNode.textContent = '';
-    state.payableHeadlineNode.textContent = '';
+    state.payableFooterNode.hidden = true;
     return;
   }
 
-  const dailyPrice = Number(totals.subtotal);
+  const dailyPrice = Number(totals.daily_price);
+  const subtotal = Number(totals.subtotal);
   const taxTotal = Number(totals.tax_total);
   const grandTotal = Number(totals.grand_total);
+  const nights = Number(totals.nights);
   const payable = resolveCheckoutAmount(payableAmount, grandTotal);
 
   state.dailyValueNode.textContent = formatCurrency(dailyPrice, state.currency);
+  state.subtotalLabelNode.textContent = formatCheckoutSubtotalLabel(state.labels.subtotal, nights);
+  state.subtotalValueNode.textContent = formatCurrency(subtotal, state.currency);
   state.taxValueNode.textContent = formatCurrency(taxTotal, state.currency);
   state.totalValueNode.textContent = formatCurrency(grandTotal, state.currency);
   state.payableValueNode.textContent = formatCurrency(payable, state.currency);
-  state.payableHeadlineNode.textContent = formatCurrency(payable, state.currency);
+  state.payableFooterNode.hidden = !Number.isFinite(payable)
+    || !Number.isFinite(grandTotal)
+    || Math.abs(payable - grandTotal) < 0.005;
 
   const payLabel = Number.isFinite(payable) && payable > 0
     ? `${state.labels.paySecurely} (${formatCurrency(payable, state.currency)})`
@@ -1694,6 +1715,7 @@ function buildCheckoutLabels(inputLabels) {
     adultSingular: sanitizeText(labels.adultSingular, 'adult'),
     adultPlural: sanitizeText(labels.adultPlural, 'adults'),
     rent: sanitizeText(labels.rent, 'Rent'),
+    subtotal: sanitizeText(labels.subtotal, 'Subtotal'),
     tax: sanitizeText(labels.tax, 'Tax'),
     total: sanitizeText(labels.total, 'Total'),
     depositAmount: sanitizeText(labels.depositAmount, 'Deposit Amount'),
@@ -1958,6 +1980,20 @@ function resolveCheckoutAmount(value, fallback = 0) {
   }
 
   return 0;
+}
+
+function formatCheckoutSubtotalLabel(baseLabel, nights) {
+  const normalizedLabel = sanitizeText(baseLabel, 'Subtotal');
+  const totalNights = Number(nights);
+
+  if (!Number.isFinite(totalNights) || totalNights <= 0) {
+    return normalizedLabel;
+  }
+
+  const roundedNights = Math.round(totalNights);
+  const nightsLabel = roundedNights === 1 ? 'night' : 'nights';
+
+  return `${normalizedLabel} for ${roundedNights} ${nightsLabel}`;
 }
 
 function sanitizePositiveInt(value, fallback = 0) {

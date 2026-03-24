@@ -121,6 +121,11 @@ class Booking_Checkout_Shortcode
 
     private function resolve_property_id(string $attribute_property_id): string
     {
+        $request_property_id = $this->read_request_property_id();
+        if ($request_property_id !== '') {
+            return $request_property_id;
+        }
+
         $normalized_attribute_property_id = trim(sanitize_text_field($attribute_property_id));
         if ($normalized_attribute_property_id !== '') {
             return $normalized_attribute_property_id;
@@ -141,6 +146,20 @@ class Booking_Checkout_Shortcode
         }
 
         return trim(sanitize_text_field((string) $property_id));
+    }
+
+    private function read_request_property_id(): string
+    {
+        if (!isset($_GET['property_id'])) {
+            return '';
+        }
+
+        $raw_property_id = wp_unslash($_GET['property_id']);
+        if (!is_scalar($raw_property_id)) {
+            return '';
+        }
+
+        return trim(sanitize_text_field((string) $raw_property_id));
     }
 
     /**

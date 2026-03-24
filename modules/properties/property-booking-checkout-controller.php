@@ -110,6 +110,7 @@ class Property_Booking_Checkout_Controller
                 'portal_id' => $this->read_string_param($request, 'portal_id'),
                 'source_of_business' => $this->read_string_param($request, 'source_of_business'),
                 'guest' => $this->read_array_param($request, 'guest'),
+                'quote' => $this->read_array_param($request, 'quote'),
             ]
         );
 

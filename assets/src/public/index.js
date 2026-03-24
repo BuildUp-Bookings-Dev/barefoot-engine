@@ -1946,6 +1946,8 @@ function initializeBookingWidget(mountNode, config) {
   const dailyValueNode = mountNode.querySelector('[data-be-booking-total="daily"]');
   const subtotalValueNode = mountNode.querySelector('[data-be-booking-total="subtotal"]');
   const taxValueNode = mountNode.querySelector('[data-be-booking-total="tax"]');
+  const depositRowNode = mountNode.querySelector('[data-be-booking-row="deposit"]');
+  const depositValueNode = mountNode.querySelector('[data-be-booking-total="deposit"]');
   const totalValueNode = mountNode.querySelector('[data-be-booking-total="grand"]');
 
   if (
@@ -1957,6 +1959,8 @@ function initializeBookingWidget(mountNode, config) {
     || !(dailyValueNode instanceof HTMLElement)
     || !(subtotalValueNode instanceof HTMLElement)
     || !(taxValueNode instanceof HTMLElement)
+    || !(depositRowNode instanceof HTMLElement)
+    || !(depositValueNode instanceof HTMLElement)
     || !(totalValueNode instanceof HTMLElement)
   ) {
     return;
@@ -1985,6 +1989,8 @@ function initializeBookingWidget(mountNode, config) {
     dailyValueNode,
     subtotalValueNode,
     taxValueNode,
+    depositRowNode,
+    depositValueNode,
     totalValueNode,
     guestsSelect,
     disabledDates: new Set(),
@@ -2100,6 +2106,10 @@ function buildBookingRuntime(config) {
           <div class="barefoot-engine-booking-widget__summary-row">
             <span>${escapeHtml(labels.tax)}</span>
             <strong data-be-booking-total="tax"></strong>
+          </div>
+          <div class="barefoot-engine-booking-widget__summary-row" data-be-booking-row="deposit" hidden>
+            <span>${escapeHtml(labels.depositAmount)}</span>
+            <strong data-be-booking-total="deposit"></strong>
           </div>
           <div class="barefoot-engine-booking-widget__summary-row barefoot-engine-booking-widget__summary-row--total">
             <span>${escapeHtml(labels.total)}</span>
@@ -2217,7 +2227,7 @@ function runBookingQuoteCheck(state) {
       }
 
       setBookingStatus(state, 'available', 'success');
-      renderBookingTotals(state, payload.totals);
+      renderBookingTotals(state, payload);
       state.bookNowButton.disabled = !canNavigateBookingNow(state);
     })
     .catch((error) => {
@@ -2505,25 +2515,33 @@ function renderBookingTotals(state, totals) {
     || !(state.dailyValueNode instanceof HTMLElement)
     || !(state.subtotalValueNode instanceof HTMLElement)
     || !(state.taxValueNode instanceof HTMLElement)
+    || !(state.depositRowNode instanceof HTMLElement)
+    || !(state.depositValueNode instanceof HTMLElement)
     || !(state.totalValueNode instanceof HTMLElement)
   ) {
     return;
   }
 
-  if (!isPlainObject(totals)) {
+  const payload = isPlainObject(totals) ? totals : null;
+  const totalsData = isPlainObject(payload?.totals) ? payload.totals : payload;
+
+  if (!isPlainObject(totalsData)) {
     state.summaryNode.hidden = true;
     state.bookNowButton.disabled = true;
     state.dailyValueNode.textContent = '';
     state.subtotalValueNode.textContent = '';
     state.taxValueNode.textContent = '';
+    state.depositRowNode.hidden = true;
+    state.depositValueNode.textContent = '';
     state.totalValueNode.textContent = '';
     return;
   }
 
-  const dailyPrice = Number(totals.daily_price);
-  const subtotal = Number(totals.subtotal);
-  const taxTotal = Number(totals.tax_total);
-  const grandTotal = Number(totals.grand_total);
+  const dailyPrice = Number(totalsData.daily_price);
+  const subtotal = Number(totalsData.subtotal);
+  const taxTotal = Number(totalsData.tax_total);
+  const grandTotal = Number(totalsData.grand_total);
+  const depositAmount = Number(payload?.depositAmount ?? payload?.deposit_amount);
 
   if (
     !Number.isFinite(dailyPrice)
@@ -2536,6 +2554,8 @@ function renderBookingTotals(state, totals) {
     state.dailyValueNode.textContent = '';
     state.subtotalValueNode.textContent = '';
     state.taxValueNode.textContent = '';
+    state.depositRowNode.hidden = true;
+    state.depositValueNode.textContent = '';
     state.totalValueNode.textContent = '';
     return;
   }
@@ -2544,6 +2564,13 @@ function renderBookingTotals(state, totals) {
   state.dailyValueNode.textContent = formatBookingCurrency(dailyPrice, state.currency);
   state.subtotalValueNode.textContent = formatBookingCurrency(subtotal, state.currency);
   state.taxValueNode.textContent = formatBookingCurrency(taxTotal, state.currency);
+  if (Number.isFinite(depositAmount) && depositAmount > 0) {
+    state.depositRowNode.hidden = false;
+    state.depositValueNode.textContent = formatBookingCurrency(depositAmount, state.currency);
+  } else {
+    state.depositRowNode.hidden = true;
+    state.depositValueNode.textContent = '';
+  }
   state.totalValueNode.textContent = formatBookingCurrency(grandTotal, state.currency);
   state.bookNowButton.disabled = !canNavigateBookingNow(state);
 }
@@ -2644,6 +2671,7 @@ function buildBookingLabels(inputLabels) {
     daily: sanitizeBookingText(labels.daily, 'Rent'),
     subtotal: sanitizeBookingText(labels.subtotal, 'Subtotal'),
     tax: sanitizeBookingText(labels.tax, 'Tax'),
+    depositAmount: sanitizeBookingText(labels.depositAmount, 'Deposit Amount'),
     total: sanitizeBookingText(labels.total, 'Total'),
     bookNow: sanitizeBookingText(labels.bookNow, 'BOOK NOW'),
     missingContext: sanitizeBookingText(labels.missingContext, 'Property context is required to load the booking widget.'),

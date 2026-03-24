@@ -287,6 +287,51 @@ class Property_Booking_Checkout_Service
             }
         }
 
+        if ($this->is_mock_mode_enabled()) {
+            if ($session_token === '') {
+                $session_token = $this->generate_session_token();
+            }
+
+            if ($booking_record_id <= 0) {
+                $booking_record_id = $this->booking_records->create_record(
+                    [
+                        'status' => Property_Booking_Records::STATUS_STARTED,
+                        'property_id' => $property_id,
+                        'check_in' => $check_in,
+                        'check_out' => $check_out,
+                        'guests' => $guests,
+                        'reztypeid' => $reztypeid,
+                        'payment_mode' => $payment_mode,
+                        'portal_id' => $portal_id,
+                        'property_summary' => $summary,
+                        'guest_details' => $guest_details,
+                        'session_token_hash' => $this->build_session_token_hash($session_token),
+                        'diagnostics' => [
+                            'started_from' => $existing_session !== null ? 'checkout_resume' : 'checkout_direct',
+                            'mock_mode' => true,
+                        ],
+                        'event_label' => __('Mock checkout session initiated.', 'barefoot-engine'),
+                    ]
+                );
+            }
+
+            return $this->create_mock_checkout_session(
+                $session_token,
+                $booking_record_id,
+                $property_id,
+                $check_in,
+                $check_out,
+                $guests,
+                $reztypeid,
+                $payment_mode,
+                $portal_id,
+                $source_of_business,
+                $summary,
+                $guest_details,
+                is_array($payload['quote'] ?? null) ? $payload['quote'] : []
+            );
+        }
+
         $settings = $this->api_settings->get_settings();
         if (!$this->api_settings->has_required_credentials($settings)) {
             return new WP_Error(
@@ -514,7 +559,8 @@ class Property_Booking_Checkout_Service
             $rate_details,
             max(1, $this->calculate_date_diff_days($check_in, $check_out))
         );
-        $payable_amount = $this->resolve_payable_amount($payment_schedule, $totals);
+        $deposit_amount = $this->resolve_deposit_amount($payment_schedule, $totals);
+        $payable_amount = $this->resolve_payable_amount($payment_schedule, $totals, $deposit_amount);
 
         $session_payload = [
             'property_id' => $property_id,
@@ -531,6 +577,7 @@ class Property_Booking_Checkout_Service
             'guest_details' => $guest_details,
             'totals' => $totals,
             'payment_schedule' => $payment_schedule,
+            'deposit_amount' => $deposit_amount,
             'payable_amount' => $payable_amount,
             'booking_record_id' => $booking_record_id > 0 ? $booking_record_id : 0,
             'created_at' => time(),
@@ -554,6 +601,7 @@ class Property_Booking_Checkout_Service
                     'guest_details' => $guest_details,
                     'totals' => $totals,
                     'payment_schedule' => $payment_schedule,
+                    'deposit_amount' => $deposit_amount,
                     'payable_amount' => $payable_amount,
                     'lease_id' => $lease_id,
                     'tenant_id' => $tenant_id,
@@ -572,7 +620,7 @@ class Property_Booking_Checkout_Service
             'totals' => $totals,
             'paymentSchedule' => $payment_schedule,
             'payableAmount' => $payable_amount,
-            'depositAmount' => $payable_amount,
+            'depositAmount' => $deposit_amount,
         ];
     }
 
@@ -636,6 +684,10 @@ class Property_Booking_Checkout_Service
             return $payment_details;
         }
 
+        if ($this->is_mock_mode_enabled()) {
+            return $this->complete_mock_checkout_session($session_token, $session, $payment_details, $booking_record_id);
+        }
+
         $settings = $this->api_settings->get_settings();
         if (!$this->api_settings->has_required_credentials($settings)) {
             return new WP_Error(
@@ -648,6 +700,9 @@ class Property_Booking_Checkout_Service
         $payable_amount = isset($session['payable_amount']) && is_numeric($session['payable_amount'])
             ? (float) $session['payable_amount']
             : 0.0;
+        $deposit_amount = isset($session['deposit_amount']) && is_numeric($session['deposit_amount'])
+            ? (float) $session['deposit_amount']
+            : $payable_amount;
         $lease_id = isset($session['lease_id']) ? (int) $session['lease_id'] : 0;
         $tenant_id = isset($session['tenant_id']) ? (int) $session['tenant_id'] : 0;
         $payment_mode = (string) ($session['payment_mode'] ?? self::DEFAULT_PAYMENT_MODE);
@@ -773,6 +828,7 @@ class Property_Booking_Checkout_Service
             'totals' => $session['totals'] ?? null,
             'paymentSchedule' => $session['payment_schedule'] ?? [],
             'payableAmount' => $this->normalize_money($payable_amount),
+            'depositAmount' => $this->normalize_money($deposit_amount),
             'bookingRecordId' => $booking_record_id > 0 ? $booking_record_id : null,
         ];
     }
@@ -1143,17 +1199,51 @@ class Property_Booking_Checkout_Service
      * @param array<int, array<string, mixed>> $payment_schedule
      * @param array<string, float|int> $totals
      */
-    private function resolve_payable_amount(array $payment_schedule, array $totals): float
+    private function resolve_deposit_amount(array $payment_schedule, array $totals): float
     {
-        foreach ($payment_schedule as $row) {
-            if (!is_array($row) || !isset($row['amount']) || !is_numeric($row['amount'])) {
-                continue;
-            }
+        $row = $this->resolve_schedule_row(
+            $payment_schedule,
+            [
+                'deposit',
+                'down payment',
+                'first payment',
+                'first due',
+                'due now',
+                'initial payment',
+            ]
+        );
 
-            $amount = abs((float) $row['amount']);
-            if ($amount > 0) {
-                return $this->normalize_money($amount);
-            }
+        if (is_array($row) && isset($row['amount']) && is_numeric($row['amount'])) {
+            return $this->normalize_money(abs((float) $row['amount']));
+        }
+
+        return $this->resolve_payable_amount($payment_schedule, $totals, 0.0);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $payment_schedule
+     * @param array<string, float|int> $totals
+     */
+    private function resolve_payable_amount(array $payment_schedule, array $totals, float $deposit_amount = 0.0): float
+    {
+        $row = $this->resolve_schedule_row(
+            $payment_schedule,
+            [
+                'payable',
+                'due now',
+                'payment due',
+                'first payment',
+                'first due',
+                'deposit',
+            ]
+        );
+
+        if (is_array($row) && isset($row['amount']) && is_numeric($row['amount'])) {
+            return $this->normalize_money(abs((float) $row['amount']));
+        }
+
+        if ($deposit_amount > 0) {
+            return $this->normalize_money($deposit_amount);
         }
 
         return isset($totals['grand_total']) && is_numeric($totals['grand_total'])
@@ -1161,16 +1251,86 @@ class Property_Booking_Checkout_Service
             : 0.0;
     }
 
+    /**
+     * @param array<int, array<string, mixed>> $payment_schedule
+     * @param array<int, string> $preferred_labels
+     * @return array<string, mixed>|null
+     */
+    private function resolve_schedule_row(array $payment_schedule, array $preferred_labels): ?array
+    {
+        $rows = [];
+
+        foreach ($payment_schedule as $index => $row) {
+            if (!is_array($row) || !isset($row['amount']) || !is_numeric($row['amount'])) {
+                continue;
+            }
+
+            $amount = abs((float) $row['amount']);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $label = isset($row['label']) ? strtolower(trim((string) $row['label'])) : '';
+            $due_date = isset($row['due_date']) ? trim((string) $row['due_date']) : '';
+
+            $priority = 50;
+            foreach ($preferred_labels as $position => $needle) {
+                if ($label !== '' && str_contains($label, strtolower($needle))) {
+                    $priority = $position;
+                    break;
+                }
+            }
+
+            $rows[] = [
+                'row' => $row,
+                'priority' => $priority,
+                'due_date' => $due_date !== '' ? $due_date : '9999-12-31',
+                'index' => (int) $index,
+            ];
+        }
+
+        if ($rows === []) {
+            return null;
+        }
+
+        usort(
+            $rows,
+            static function (array $left, array $right): int {
+                if ($left['priority'] !== $right['priority']) {
+                    return $left['priority'] <=> $right['priority'];
+                }
+
+                if ($left['due_date'] !== $right['due_date']) {
+                    return strcmp((string) $left['due_date'], (string) $right['due_date']);
+                }
+
+                return $left['index'] <=> $right['index'];
+            }
+        );
+
+        return $rows[0]['row'] ?? null;
+    }
+
     private function resolve_property_title(array $fields, ?\WP_Post $post): string
     {
         $name = $this->clean_string($fields['name'] ?? '');
-        $unit_type = $this->clean_string($fields['a259'] ?? '');
+        $keyboard_id = $this->clean_string($fields['keyboardid'] ?? '');
+        $unit_type = $this->resolve_unit_type($fields);
+        $base_title = '';
 
-        if ($name !== '' && $unit_type !== '') {
-            return 'Unit ' . $name . ' · ' . $unit_type;
+        foreach ([$name, $keyboard_id, $post?->post_title] as $candidate) {
+            $title = $this->clean_string($candidate);
+            if ($title !== '') {
+                $base_title = $title;
+                break;
+            }
         }
 
-        foreach ([$name, $unit_type, $post?->post_title] as $candidate) {
+        if ($base_title !== '' && $unit_type !== '') {
+            return $base_title . ' · ' . $unit_type;
+        }
+
+        foreach ([$base_title, $unit_type, $this->clean_string($fields['PropertyTitle'] ?? '')] as $candidate) {
             $title = $this->clean_string($candidate);
             if ($title !== '') {
                 return $title;
@@ -1182,18 +1342,37 @@ class Property_Booking_Checkout_Service
 
     private function resolve_property_address(array $fields): string
     {
-        $parts = [];
+        $city = $this->clean_string($fields['city'] ?? '');
+        $state = $this->clean_string($fields['state'] ?? '');
+        $zip = $this->clean_string($fields['zip'] ?? '');
+        $country = $this->clean_string($fields['country'] ?? '');
+        $locality_parts = [];
 
-        foreach (['propAddressNew', 'propAddress', 'street', 'street2', 'city', 'state', 'zip', 'country'] as $key) {
-            $value = $this->clean_string($fields[$key] ?? '');
-            if ($value === '' || in_array($value, $parts, true)) {
-                continue;
-            }
-
-            $parts[] = $value;
+        if ($city !== '') {
+            $locality_parts[] = $city;
         }
 
-        return implode(', ', $parts);
+        $region = trim(implode(' ', array_filter([$state, $zip], static fn(string $value): bool => $value !== '')));
+        if ($region !== '') {
+            $locality_parts[] = $region;
+        }
+
+        if ($country !== '') {
+            $locality_parts[] = $country;
+        }
+
+        if ($locality_parts !== []) {
+            return implode(', ', $locality_parts);
+        }
+
+        foreach (['propAddressNew', 'propAddress', 'street', 'street2'] as $key) {
+            $value = $this->clean_string($fields[$key] ?? '');
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     private function resolve_property_image_url(int $post_id, array $fields): string
@@ -1201,6 +1380,13 @@ class Property_Booking_Checkout_Service
         $images = get_post_meta($post_id, '_be_property_images', true);
         if (is_array($images)) {
             foreach ($images as $image) {
+                if (is_scalar($image)) {
+                    $value = $this->clean_string((string) $image);
+                    if ($value !== '') {
+                        return esc_url_raw($value);
+                    }
+                }
+
                 if (!is_array($image)) {
                     continue;
                 }
@@ -1258,6 +1444,19 @@ class Property_Booking_Checkout_Service
             return max(0, (int) $fields['a56']);
         }
 
+        foreach (
+            [
+                $this->resolve_amenity_value($fields, ['bedrooms']),
+                $this->resolve_unit_type($fields),
+                $this->clean_string($fields['PropertyTitle'] ?? ''),
+            ] as $candidate
+        ) {
+            $parsed = $this->parse_count_from_text($candidate, ['bedroom', 'bedrooms', 'bed', 'beds']);
+            if ($parsed !== null) {
+                return (int) $parsed;
+            }
+        }
+
         return null;
     }
 
@@ -1278,7 +1477,120 @@ class Property_Booking_Checkout_Service
             }
         }
 
+        foreach (
+            [
+                $this->resolve_amenity_value($fields, ['a195', 'bathrooms', 'number-of-bathrooms']),
+                $this->resolve_unit_type($fields),
+                $this->clean_string($fields['PropertyTitle'] ?? ''),
+            ] as $candidate
+        ) {
+            $parsed = $this->parse_count_from_text($candidate, ['bathroom', 'bathrooms', 'bath', 'baths', 'ba']);
+            if ($parsed !== null) {
+                return $parsed;
+            }
+        }
+
         return null;
+    }
+
+    private function resolve_unit_type(array $fields): string
+    {
+        $direct_value = $this->clean_string($fields['a259'] ?? '');
+        if ($direct_value !== '') {
+            return $direct_value;
+        }
+
+        $amenity_value = $this->resolve_amenity_value($fields, ['unit-type', 'Unit Type']);
+        if ($amenity_value !== null) {
+            return $amenity_value;
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<int, string> $candidate_keys
+     */
+    private function resolve_amenity_value(array $fields, array $candidate_keys): ?string
+    {
+        if (!isset($fields['amenities']) || !is_array($fields['amenities'])) {
+            return null;
+        }
+
+        $normalized_candidates = array_filter(
+            array_map(
+                static fn(string $candidate): string => strtolower(trim($candidate)),
+                $candidate_keys
+            ),
+            static fn(string $candidate): bool => $candidate !== ''
+        );
+
+        if ($normalized_candidates === []) {
+            return null;
+        }
+
+        foreach ($fields['amenities'] as $amenity) {
+            if (!is_array($amenity)) {
+                continue;
+            }
+
+            $amenity_keys = [
+                strtolower(trim((string) ($amenity['key'] ?? ''))),
+                strtolower(trim((string) ($amenity['label'] ?? ''))),
+                strtolower(trim((string) ($amenity['display'] ?? ''))),
+            ];
+
+            if (array_intersect($normalized_candidates, array_filter($amenity_keys)) === []) {
+                continue;
+            }
+
+            $value = $this->clean_string($amenity['value'] ?? '');
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<int, string> $tokens
+     */
+    private function parse_count_from_text(mixed $value, array $tokens): ?string
+    {
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        $text = trim((string) $value);
+        if ($text === '') {
+            return null;
+        }
+
+        $token_pattern = implode('|', array_map(static fn(string $token): string => preg_quote($token, '/'), $tokens));
+        if (preg_match('/(\d+(?:\.\d+)?)\s*(?:' . $token_pattern . ')\b/i', $text, $matches) !== 1) {
+            return null;
+        }
+
+        return $this->normalize_non_negative_number_string($matches[1] ?? null);
+    }
+
+    private function normalize_non_negative_number_string(mixed $value): ?string
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $numeric = (float) $value;
+        if ($numeric < 0) {
+            return null;
+        }
+
+        if (abs($numeric - round($numeric)) < 0.00001) {
+            return (string) (int) round($numeric);
+        }
+
+        return rtrim(rtrim(number_format($numeric, 2, '.', ''), '0'), '.');
     }
 
     private function clean_string(mixed $value): string
@@ -1346,6 +1658,271 @@ class Property_Booking_Checkout_Service
         }
 
         return hash('sha256', $session_token);
+    }
+
+    private function is_mock_mode_enabled(): bool
+    {
+        return (bool) apply_filters('barefoot_engine_booking_checkout_mock_mode', true);
+    }
+
+    /**
+     * @param array<string, mixed> $summary
+     * @param array<string, string> $guest_details
+     * @param array<string, mixed> $quote_payload
+     * @return array<string, mixed>
+     */
+    private function create_mock_checkout_session(
+        string $session_token,
+        int $booking_record_id,
+        string $property_id,
+        string $check_in,
+        string $check_out,
+        int $guests,
+        int $reztypeid,
+        string $payment_mode,
+        string $portal_id,
+        string $source_of_business,
+        array $summary,
+        array $guest_details,
+        array $quote_payload
+    ): array {
+        $totals = $this->extract_mock_totals($quote_payload, $check_in, $check_out);
+        $deposit_amount = $this->resolve_mock_deposit_amount($quote_payload, $totals);
+        $payable_amount = $this->resolve_mock_payable_amount($quote_payload, $totals, $deposit_amount);
+        $payment_schedule = [
+            [
+                'label' => __('Mock payment due now', 'barefoot-engine'),
+                'amount' => $this->format_money_string($deposit_amount),
+                'due_date' => $check_in,
+            ],
+        ];
+        $lease_id = 900000 + wp_rand(1000, 9999);
+        $tenant_id = 700000 + wp_rand(1000, 9999);
+
+        $session_payload = [
+            'property_id' => $property_id,
+            'check_in' => $check_in,
+            'check_out' => $check_out,
+            'guests' => $guests,
+            'reztypeid' => $reztypeid,
+            'payment_mode' => $payment_mode,
+            'portal_id' => $portal_id,
+            'source_of_business' => $source_of_business,
+            'lease_id' => $lease_id,
+            'tenant_id' => $tenant_id,
+            'property_summary' => $summary,
+            'guest_details' => $guest_details,
+            'totals' => $totals,
+            'payment_schedule' => $payment_schedule,
+            'deposit_amount' => $deposit_amount,
+            'payable_amount' => $payable_amount,
+            'booking_record_id' => $booking_record_id > 0 ? $booking_record_id : 0,
+            'mock_mode' => true,
+            'created_at' => time(),
+        ];
+
+        set_transient($this->build_session_transient_key($session_token), $session_payload, $this->get_session_ttl());
+
+        if ($booking_record_id > 0) {
+            $this->booking_records->update_record(
+                $booking_record_id,
+                Property_Booking_Records::STATUS_READY_FOR_PAYMENT,
+                [
+                    'property_id' => $property_id,
+                    'check_in' => $check_in,
+                    'check_out' => $check_out,
+                    'guests' => $guests,
+                    'reztypeid' => $reztypeid,
+                    'payment_mode' => $payment_mode,
+                    'portal_id' => $portal_id,
+                    'property_summary' => $summary,
+                    'guest_details' => $guest_details,
+                    'totals' => $totals,
+                    'payment_schedule' => $payment_schedule,
+                    'deposit_amount' => $deposit_amount,
+                    'payable_amount' => $payable_amount,
+                    'lease_id' => $lease_id,
+                    'tenant_id' => $tenant_id,
+                    'session_token_hash' => $this->build_session_token_hash($session_token),
+                    'diagnostics' => [
+                        'mock_mode' => true,
+                        'mock_checkout_session' => true,
+                    ],
+                ],
+                __('Mock checkout session is ready for payment.', 'barefoot-engine')
+            );
+        }
+
+        return [
+            'available' => true,
+            'status' => 'ready',
+            'sessionToken' => $session_token,
+            'bookingRecordId' => $booking_record_id > 0 ? $booking_record_id : null,
+            'propertySummary' => $summary,
+            'totals' => $totals,
+            'paymentSchedule' => $payment_schedule,
+            'payableAmount' => $payable_amount,
+            'depositAmount' => $deposit_amount,
+            'mockMode' => true,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $session
+     * @param array<string, string> $payment_details
+     * @return array<string, mixed>
+     */
+    private function complete_mock_checkout_session(
+        string $session_token,
+        array $session,
+        array $payment_details,
+        int $booking_record_id
+    ): array {
+        $payable_amount = isset($session['payable_amount']) && is_numeric($session['payable_amount'])
+            ? (float) $session['payable_amount']
+            : 0.0;
+        $deposit_amount = isset($session['deposit_amount']) && is_numeric($session['deposit_amount'])
+            ? (float) $session['deposit_amount']
+            : $payable_amount;
+        $folio_id = 'MOCK-' . strtoupper(wp_generate_password(8, false, false));
+        $booking_result = [
+            'folio_id' => $folio_id,
+            'tenant' => isset($session['tenant_id']) ? (string) $session['tenant_id'] : '',
+            'amount' => $this->normalize_money($payable_amount),
+        ];
+        $payment_summary = $this->build_masked_payment_summary($payment_details, $booking_result);
+
+        if ($booking_record_id > 0) {
+            $this->booking_records->update_record(
+                $booking_record_id,
+                Property_Booking_Records::STATUS_BOOKING_SUCCESS,
+                [
+                    'folio_id' => $folio_id,
+                    'amount' => $this->normalize_money($payable_amount),
+                    'payment_summary' => $payment_summary,
+                    'totals' => isset($session['totals']) && is_array($session['totals']) ? $session['totals'] : [],
+                    'payment_schedule' => isset($session['payment_schedule']) && is_array($session['payment_schedule']) ? $session['payment_schedule'] : [],
+                    'payable_amount' => $payable_amount,
+                    'lease_id' => isset($session['lease_id']) ? (int) $session['lease_id'] : 0,
+                    'tenant_id' => isset($session['tenant_id']) ? (int) $session['tenant_id'] : 0,
+                    'diagnostics' => [
+                        'mock_mode' => true,
+                        'mock_booking_completion' => true,
+                    ],
+                ],
+                __('Mock booking completed locally.', 'barefoot-engine')
+            );
+        }
+
+        delete_transient($this->build_session_transient_key($session_token));
+
+        return [
+            'status' => 'success',
+            'folioId' => $folio_id,
+            'tenant' => isset($session['tenant_id']) ? (string) $session['tenant_id'] : '',
+            'amount' => $this->normalize_money($payable_amount),
+            'creditCardNum' => $payment_summary['masked_card'] ?? '',
+            'maskedCard' => $payment_summary['masked_card'] ?? '',
+            'propertySummary' => $session['property_summary'] ?? [],
+            'staySummary' => [
+                'checkIn' => $session['check_in'] ?? '',
+                'checkOut' => $session['check_out'] ?? '',
+                'guests' => $session['guests'] ?? 1,
+            ],
+            'totals' => $session['totals'] ?? null,
+            'paymentSchedule' => $session['payment_schedule'] ?? [],
+            'payableAmount' => $this->normalize_money($payable_amount),
+            'depositAmount' => $this->normalize_money($deposit_amount),
+            'bookingRecordId' => $booking_record_id > 0 ? $booking_record_id : null,
+            'mockMode' => true,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $quote_payload
+     * @return array{daily_price: float, subtotal: float, tax_total: float, grand_total: float, nights: int}
+     */
+    private function extract_mock_totals(array $quote_payload, string $check_in, string $check_out): array
+    {
+        $nights = max(1, $this->calculate_date_diff_days($check_in, $check_out));
+        $totals = isset($quote_payload['totals']) && is_array($quote_payload['totals'])
+            ? $quote_payload['totals']
+            : [];
+
+        $subtotal = isset($totals['subtotal']) && is_numeric($totals['subtotal'])
+            ? $this->normalize_money((float) $totals['subtotal'])
+            : 0.0;
+        $tax_total = isset($totals['tax_total']) && is_numeric($totals['tax_total'])
+            ? $this->normalize_money((float) $totals['tax_total'])
+            : 0.0;
+        $grand_total = isset($totals['grand_total']) && is_numeric($totals['grand_total'])
+            ? $this->normalize_money((float) $totals['grand_total'])
+            : $this->normalize_money($subtotal + $tax_total);
+        $daily_price = isset($totals['daily_price']) && is_numeric($totals['daily_price'])
+            ? $this->normalize_money((float) $totals['daily_price'])
+            : ($nights > 0 ? $this->normalize_money($subtotal / $nights) : 0.0);
+
+        return [
+            'daily_price' => $daily_price,
+            'subtotal' => $subtotal,
+            'tax_total' => $tax_total,
+            'grand_total' => $grand_total,
+            'nights' => $nights,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $quote_payload
+     * @param array<string, float|int> $totals
+     */
+    private function resolve_mock_deposit_amount(array $quote_payload, array $totals): float
+    {
+        if (isset($quote_payload['depositAmount']) && is_numeric($quote_payload['depositAmount'])) {
+            return $this->normalize_money((float) $quote_payload['depositAmount']);
+        }
+
+        if (isset($quote_payload['deposit_amount']) && is_numeric($quote_payload['deposit_amount'])) {
+            return $this->normalize_money((float) $quote_payload['deposit_amount']);
+        }
+
+        if (isset($quote_payload['payableAmount']) && is_numeric($quote_payload['payableAmount'])) {
+            return $this->normalize_money((float) $quote_payload['payableAmount']);
+        }
+
+        return isset($totals['grand_total']) && is_numeric($totals['grand_total'])
+            ? $this->normalize_money((float) $totals['grand_total'])
+            : 0.0;
+    }
+
+    /**
+     * @param array<string, mixed> $quote_payload
+     * @param array<string, float|int> $totals
+     */
+    private function resolve_mock_payable_amount(array $quote_payload, array $totals, float $deposit_amount = 0.0): float
+    {
+        if (isset($quote_payload['payableAmount']) && is_numeric($quote_payload['payableAmount'])) {
+            return $this->normalize_money((float) $quote_payload['payableAmount']);
+        }
+
+        if (isset($quote_payload['payable_amount']) && is_numeric($quote_payload['payable_amount'])) {
+            return $this->normalize_money((float) $quote_payload['payable_amount']);
+        }
+
+        if (isset($quote_payload['depositAmount']) && is_numeric($quote_payload['depositAmount'])) {
+            return $this->normalize_money((float) $quote_payload['depositAmount']);
+        }
+
+        if (isset($quote_payload['deposit_amount']) && is_numeric($quote_payload['deposit_amount'])) {
+            return $this->normalize_money((float) $quote_payload['deposit_amount']);
+        }
+
+        if ($deposit_amount > 0) {
+            return $this->normalize_money($deposit_amount);
+        }
+
+        return isset($totals['grand_total']) && is_numeric($totals['grand_total'])
+            ? $this->normalize_money((float) $totals['grand_total'])
+            : 0.0;
     }
 
     private function normalize_money(float $value): float

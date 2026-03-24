@@ -302,6 +302,33 @@ class Property_Booking_Service
             : [];
         $nights = max(1, $this->calculate_date_diff_days($normalized_check_in, $normalized_check_out));
         $totals = $this->calculate_quote_totals($line_items, $nights);
+        $payment_schedule = [];
+        $deposit_amount = 0.0;
+        $payable_amount = 0.0;
+
+        $checkout_quote_response = $this->api_client->create_quote_and_get_payment_schedule_string(
+            $settings,
+            $normalized_property_id,
+            $this->format_mdy_date($normalized_check_in),
+            $this->format_mdy_date($normalized_check_out),
+            $normalized_guests,
+            0,
+            0,
+            0,
+            $resolved_reztypeid
+        );
+
+        if (!is_wp_error($checkout_quote_response)) {
+            $parsed_checkout_quote = $this->parser->parse_create_quote_and_payment_schedule($checkout_quote_response);
+
+            if (!is_wp_error($parsed_checkout_quote)) {
+                $payment_schedule = isset($parsed_checkout_quote['payment_schedule']) && is_array($parsed_checkout_quote['payment_schedule'])
+                    ? array_values($parsed_checkout_quote['payment_schedule'])
+                    : [];
+                $deposit_amount = $this->resolve_deposit_amount($payment_schedule, $totals);
+                $payable_amount = $this->resolve_payable_amount($payment_schedule, $totals, $deposit_amount);
+            }
+        }
 
         $payload = [
             'property_id' => $normalized_property_id,
@@ -313,6 +340,12 @@ class Property_Booking_Service
             'status' => 'available',
             'line_items' => $line_items,
             'totals' => $totals,
+            'payment_schedule' => $payment_schedule,
+            'deposit_amount' => $deposit_amount,
+            'payable_amount' => $payable_amount,
+            'paymentSchedule' => $payment_schedule,
+            'depositAmount' => $deposit_amount,
+            'payableAmount' => $payable_amount,
             'cache' => [
                 'hit' => false,
                 'fetched_at' => time(),
@@ -687,6 +720,122 @@ class Property_Booking_Service
             'grand_total' => $this->normalize_money($grand_total),
             'nights' => $normalized_nights,
         ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $payment_schedule
+     * @param array<string, float|int> $totals
+     */
+    private function resolve_deposit_amount(array $payment_schedule, array $totals): float
+    {
+        $row = $this->resolve_schedule_row(
+            $payment_schedule,
+            [
+                'deposit',
+                'down payment',
+                'first payment',
+                'first due',
+                'due now',
+                'initial payment',
+            ]
+        );
+
+        if (is_array($row) && isset($row['amount']) && is_numeric($row['amount'])) {
+            return $this->normalize_money(abs((float) $row['amount']));
+        }
+
+        return $this->resolve_payable_amount($payment_schedule, $totals, 0.0);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $payment_schedule
+     * @param array<string, float|int> $totals
+     */
+    private function resolve_payable_amount(array $payment_schedule, array $totals, float $deposit_amount = 0.0): float
+    {
+        $row = $this->resolve_schedule_row(
+            $payment_schedule,
+            [
+                'payable',
+                'due now',
+                'payment due',
+                'first payment',
+                'first due',
+                'deposit',
+            ]
+        );
+
+        if (is_array($row) && isset($row['amount']) && is_numeric($row['amount'])) {
+            return $this->normalize_money(abs((float) $row['amount']));
+        }
+
+        if ($deposit_amount > 0) {
+            return $this->normalize_money($deposit_amount);
+        }
+
+        return isset($totals['grand_total']) && is_numeric($totals['grand_total'])
+            ? $this->normalize_money((float) $totals['grand_total'])
+            : 0.0;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $payment_schedule
+     * @param array<int, string> $preferred_labels
+     * @return array<string, mixed>|null
+     */
+    private function resolve_schedule_row(array $payment_schedule, array $preferred_labels): ?array
+    {
+        $rows = [];
+
+        foreach ($payment_schedule as $index => $row) {
+            if (!is_array($row) || !isset($row['amount']) || !is_numeric($row['amount'])) {
+                continue;
+            }
+
+            $amount = abs((float) $row['amount']);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $label = isset($row['label']) ? strtolower(trim((string) $row['label'])) : '';
+            $due_date = isset($row['due_date']) ? trim((string) $row['due_date']) : '';
+
+            $priority = 50;
+            foreach ($preferred_labels as $position => $needle) {
+                if ($label !== '' && str_contains($label, strtolower($needle))) {
+                    $priority = $position;
+                    break;
+                }
+            }
+
+            $rows[] = [
+                'row' => $row,
+                'priority' => $priority,
+                'due_date' => $due_date !== '' ? $due_date : '9999-12-31',
+                'index' => (int) $index,
+            ];
+        }
+
+        if ($rows === []) {
+            return null;
+        }
+
+        usort(
+            $rows,
+            static function (array $left, array $right): int {
+                if ($left['priority'] !== $right['priority']) {
+                    return $left['priority'] <=> $right['priority'];
+                }
+
+                if ($left['due_date'] !== $right['due_date']) {
+                    return strcmp((string) $left['due_date'], (string) $right['due_date']);
+                }
+
+                return $left['index'] <=> $right['index'];
+            }
+        );
+
+        return $rows[0]['row'] ?? null;
     }
 
     private function normalize_money(float $value): float

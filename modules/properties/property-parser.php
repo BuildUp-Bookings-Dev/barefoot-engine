@@ -604,7 +604,13 @@ class Property_Parser
     /**
      * @return array{
      *     rate_details: array<int, array{name: string, value: string, amount: float|null, rate_id: string}>,
-     *     payment_schedule: array<int, array{due_date: string, amount: float|null, raw_amount: string}>,
+     *     payment_schedule: array<int, array{
+     *         due_date: string,
+     *         amount: float|null,
+     *         raw_amount: string,
+     *         label: string,
+     *         fields: array<string, string>
+     *     }>,
      *     quote_info: array{leaseid: int, arrived_date: string, departure_date: string, num_adult: int, num_pet: int, num_baby: int, num_child: int},
      *     raw_payload: string
      * }|WP_Error
@@ -660,11 +666,25 @@ class Property_Parser
                     continue;
                 }
 
-                $due_date = $this->normalize_booking_date($this->read_child_text($schedule_node, 'duedate'));
-                $raw_amount = $this->read_child_text($schedule_node, 'amount');
+                $fields = $this->extract_child_text_map($schedule_node);
+                $due_date = $this->normalize_booking_date($fields['duedate'] ?? '');
+                $raw_amount = isset($fields['amount']) ? (string) $fields['amount'] : '';
                 $amount = $this->normalize_rate_amount($raw_amount);
+                $label = $this->first_non_empty_value(
+                    $fields,
+                    [
+                        'label',
+                        'description',
+                        'paymentdescription',
+                        'paymentdesc',
+                        'name',
+                        'type',
+                        'paymenttype',
+                        'scheduletype',
+                    ]
+                );
 
-                if ($due_date === '' && $amount === null) {
+                if ($due_date === '' && $amount === null && $label === '') {
                     continue;
                 }
 
@@ -672,6 +692,8 @@ class Property_Parser
                     'due_date' => $due_date,
                     'amount' => $amount,
                     'raw_amount' => $raw_amount,
+                    'label' => $label,
+                    'fields' => $fields,
                 ];
             }
         }
@@ -1258,6 +1280,49 @@ class Property_Parser
         foreach ($parent->childNodes as $child_node) {
             if ($child_node instanceof \DOMElement && $child_node->localName === $name) {
                 return trim($child_node->textContent);
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function extract_child_text_map(\DOMElement $parent): array
+    {
+        $fields = [];
+
+        foreach ($parent->childNodes as $child_node) {
+            if (!$child_node instanceof \DOMElement) {
+                continue;
+            }
+
+            $key = strtolower(trim($child_node->localName));
+            if ($key === '') {
+                continue;
+            }
+
+            $fields[$key] = trim($child_node->textContent);
+        }
+
+        return $fields;
+    }
+
+    /**
+     * @param array<string, string> $fields
+     * @param array<int, string> $keys
+     */
+    private function first_non_empty_value(array $fields, array $keys): string
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $fields)) {
+                continue;
+            }
+
+            $value = trim((string) $fields[$key]);
+            if ($value !== '') {
+                return $value;
             }
         }
 
