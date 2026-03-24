@@ -136,7 +136,6 @@ function bootListingsWidgets() {
               },
             });
             installListingsSearchSubmitRule(searchWidget);
-            installListingsFilterApplySearch(searchWidget, host);
             installListingsClearButtonSync(searchWidget, mountNode, host);
 
             if (hasInitialWidgetValues) {
@@ -443,30 +442,6 @@ function installListingsSearchSubmitRule(widget) {
   if (typeof widget.syncSearchDisabledState === 'function') {
     widget.syncSearchDisabledState();
   }
-}
-
-function installListingsFilterApplySearch(widget, hostNode) {
-  if (!widget || widget.isDestroyed || widget.beFilterApplySearchInstalled || !(hostNode instanceof HTMLElement)) {
-    return;
-  }
-
-  const onClick = (event) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target || !target.closest('[data-action="apply-filters"]')) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      if (widget.isDestroyed || typeof widget.handleSearch !== 'function') {
-        return;
-      }
-
-      widget.handleSearch();
-    });
-  };
-
-  hostNode.addEventListener('click', onClick);
-  widget.beFilterApplySearchInstalled = true;
 }
 
 function installCustomChoicePopoverScrollbar(widget) {

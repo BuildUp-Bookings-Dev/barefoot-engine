@@ -26,8 +26,19 @@
 .barefoot-engine-public .bp-search-widget__icon-button--filter:hover,
 .barefoot-engine-public .bp-search-widget__icon-button--filter:focus,
 .barefoot-engine-public .bp-search-widget__icon-button--filter:focus-visible,
-.barefoot-engine-public .bp-search-widget__icon-button--filter:active {
+.barefoot-engine-public .bp-search-widget__icon-button--filter:active,
+.bp-search-widget-host .bp-search-widget__filter-close,
+.bp-search-widget-host .bp-search-widget__filter-close:hover,
+.bp-search-widget-host .bp-search-widget__filter-close:focus,
+.bp-search-widget-host .bp-search-widget__filter-close:focus-visible,
+.bp-search-widget-host .bp-search-widget__filter-close:active,
+.bp-search-widget-host .bp-search-widget__filter-reset,
+.bp-search-widget-host .bp-search-widget__filter-reset:hover,
+.bp-search-widget-host .bp-search-widget__filter-reset:focus,
+.bp-search-widget-host .bp-search-widget__filter-reset:focus-visible,
+.bp-search-widget-host .bp-search-widget__filter-reset:active {
   background: transparent !important;
+  box-shadow: none !important;
 }
 
 .barefoot-engine-public .bp-search-widget__popover,
@@ -37,7 +48,7 @@
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: auto;
-  padding-right: 0;
+  padding-right: 10px;
   background-clip: padding-box;
   scrollbar-width: auto;
   -ms-overflow-style: auto;
@@ -163,30 +174,6 @@
   box-sizing: border-box;
 }
 
-@media (min-width: 1024px) {
-  .barefoot-engine-listings__mount {
-    --be-listings-map-sticky-top: 0px;
-    align-items: flex-start;
-    overflow: visible;
-  }
-
-  body.admin-bar .barefoot-engine-listings__mount {
-    --be-listings-map-sticky-top: 32px;
-  }
-
-  .barefoot-engine-listings__mount .lm-map-panel {
-    position: sticky;
-    top: var(--be-listings-map-sticky-top);
-    align-self: flex-start;
-    height: calc(100vh - var(--be-listings-map-sticky-top));
-  }
-
-  .barefoot-engine-listings__mount .lm-map-container {
-    height: 100% !important;
-    min-height: 100% !important;
-  }
-}
-
 .barefoot-engine-listings .lm-toolbar-left {
   display: flex;
   align-items: center;
@@ -200,6 +187,30 @@
   gap: 0.75rem;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.barefoot-engine-listings .lm-view-toggle-btn:hover,
+.barefoot-engine-listings .lm-view-toggle-btn:focus,
+.barefoot-engine-listings .lm-view-toggle-btn:focus-visible {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.barefoot-engine-listings .lm-view-toggle-btn.lm-view-toggle-btn-active:hover,
+.barefoot-engine-listings .lm-view-toggle-btn.lm-view-toggle-btn-active:focus,
+.barefoot-engine-listings .lm-view-toggle-btn.lm-view-toggle-btn-active:focus-visible {
+  background: var(--lm-color-text) !important;
+  box-shadow: none !important;
+}
+
+.barefoot-engine-listings .lm-toggle-map-btn:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.barefoot-engine-listings .lm-back-to-top:hover {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .barefoot-engine-listings__clear-search {

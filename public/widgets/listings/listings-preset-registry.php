@@ -24,6 +24,13 @@ class Listings_Preset_Registry
         'showSort' => true,
         'showPagination' => true,
         'pageSize' => 12,
+        'stickyMap' => true,
+        'paginationMode' => 'infinite',
+        'fullHeightMap' => false,
+        'minDesktopColumns' => 3,
+        'maxDesktopColumns' => 8,
+        'markerFocusZoom' => 15,
+        'markerFocusCenter' => null,
         'searchWidget' => [
             'targetUrl' => '',
             'showLocation' => true,
@@ -243,6 +250,34 @@ class Listings_Preset_Registry
             $normalized['pageSize'] = $this->normalize_page_size($preset['pageSize']);
         }
 
+        if (array_key_exists('paginationMode', $preset)) {
+            $normalized['paginationMode'] = $this->normalize_pagination_mode($preset['paginationMode']);
+        }
+
+        if (array_key_exists('stickyMap', $preset)) {
+            $normalized['stickyMap'] = $this->normalize_boolean($preset['stickyMap'], false);
+        }
+
+        if (array_key_exists('fullHeightMap', $preset)) {
+            $normalized['fullHeightMap'] = $this->normalize_boolean($preset['fullHeightMap'], true);
+        }
+
+        if (array_key_exists('minDesktopColumns', $preset)) {
+            $normalized['minDesktopColumns'] = $this->normalize_desktop_column_count($preset['minDesktopColumns'], 3);
+        }
+
+        if (array_key_exists('maxDesktopColumns', $preset)) {
+            $normalized['maxDesktopColumns'] = $this->normalize_desktop_column_count($preset['maxDesktopColumns'], 8);
+        }
+
+        if (array_key_exists('markerFocusZoom', $preset)) {
+            $normalized['markerFocusZoom'] = $this->normalize_integer($preset['markerFocusZoom'], 15, 1, 19);
+        }
+
+        if (array_key_exists('markerFocusCenter', $preset)) {
+            $normalized['markerFocusCenter'] = $this->normalize_marker_focus_center($preset['markerFocusCenter']);
+        }
+
         if (isset($preset['searchWidget']) && is_array($preset['searchWidget'])) {
             $normalized['searchWidget'] = $this->normalize_search_widget_config($preset['searchWidget']);
         }
@@ -351,6 +386,44 @@ class Listings_Preset_Registry
         }
 
         return min(100, $numeric);
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalize_desktop_column_count($value, int $default): int
+    {
+        return $this->normalize_integer($value, $default, 1, 12);
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalize_pagination_mode($value): string
+    {
+        if (!is_scalar($value)) {
+            return 'pages';
+        }
+
+        $mode = strtolower(trim((string) $value));
+
+        return in_array($mode, ['pages', 'infinite'], true) ? $mode : 'pages';
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<int, float>|null
+     */
+    private function normalize_marker_focus_center($value): ?array
+    {
+        if (!is_array($value) || count($value) < 2) {
+            return null;
+        }
+
+        return [
+            $this->normalize_coordinate($value[0], 14.55, -90, 90),
+            $this->normalize_coordinate($value[1], 121.03, -180, 180),
+        ];
     }
 
     /**

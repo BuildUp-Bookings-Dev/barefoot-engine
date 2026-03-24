@@ -90,6 +90,11 @@ class Listings_Shortcode
             $config = $this->normalize_filtered_config($filtered_config, $config);
         }
 
+        $mount_style = '';
+        if (empty($config['fullHeightMap'])) {
+            $mount_style = 'height:' . $height;
+        }
+
         ob_start();
         ?>
         <div class="<?php echo esc_attr(implode(' ', array_unique($wrapper_classes))); ?>">
@@ -99,7 +104,9 @@ class Listings_Shortcode
                 data-be-listings
                 data-be-listings-id="<?php echo esc_attr($instance_id); ?>"
                 data-be-listings-config="<?php echo esc_attr($config_id); ?>"
-                style="height:<?php echo esc_attr($height); ?>"
+                <?php if ($mount_style !== '') : ?>
+                    style="<?php echo esc_attr($mount_style); ?>"
+                <?php endif; ?>
             ></div>
             <script id="<?php echo esc_attr($config_id); ?>" type="application/json"><?php echo wp_json_encode($config); ?></script>
         </div>
@@ -243,6 +250,39 @@ class Listings_Shortcode
         return min(100, $numeric);
     }
 
+    /**
+     * @param mixed $value
+     */
+    private function normalize_pagination_mode($value, string $default): string
+    {
+        if (!is_scalar($value)) {
+            return $default;
+        }
+
+        $mode = strtolower(trim((string) $value));
+
+        return in_array($mode, ['pages', 'infinite'], true) ? $mode : $default;
+    }
+
+    /**
+     * @param mixed $value
+     * @param mixed $default
+     * @return array<int, float>|null
+     */
+    private function normalize_marker_focus_center($value, $default): ?array
+    {
+        $candidate = is_array($value) ? $value : $default;
+
+        if (!is_array($candidate) || count($candidate) < 2) {
+            return null;
+        }
+
+        return [
+            $this->normalize_coordinate($candidate[0], 14.55, -90, 90),
+            $this->normalize_coordinate($candidate[1], 121.03, -180, 180),
+        ];
+    }
+
     private function sanitize_currency(string $value): string
     {
         $currency = trim(sanitize_text_field($value));
@@ -300,6 +340,61 @@ class Listings_Shortcode
 
         if (isset($filtered_config['pageSize'])) {
             $config['pageSize'] = $this->normalize_page_size($filtered_config['pageSize']);
+        }
+
+        if (isset($filtered_config['paginationMode'])) {
+            $config['paginationMode'] = $this->normalize_pagination_mode(
+                $filtered_config['paginationMode'],
+                (string) ($fallback_config['paginationMode'] ?? 'pages')
+            );
+        }
+
+        if (isset($filtered_config['stickyMap'])) {
+            $config['stickyMap'] = $this->normalize_boolean(
+                $filtered_config['stickyMap'],
+                (bool) ($fallback_config['stickyMap'] ?? false)
+            );
+        }
+
+        if (isset($filtered_config['fullHeightMap'])) {
+            $config['fullHeightMap'] = $this->normalize_boolean(
+                $filtered_config['fullHeightMap'],
+                (bool) ($fallback_config['fullHeightMap'] ?? false)
+            );
+        }
+
+        if (isset($filtered_config['minDesktopColumns'])) {
+            $config['minDesktopColumns'] = $this->normalize_integer(
+                $filtered_config['minDesktopColumns'],
+                (int) ($fallback_config['minDesktopColumns'] ?? 3),
+                1,
+                12
+            );
+        }
+
+        if (isset($filtered_config['maxDesktopColumns'])) {
+            $config['maxDesktopColumns'] = $this->normalize_integer(
+                $filtered_config['maxDesktopColumns'],
+                (int) ($fallback_config['maxDesktopColumns'] ?? 8),
+                1,
+                12
+            );
+        }
+
+        if (isset($filtered_config['markerFocusZoom'])) {
+            $config['markerFocusZoom'] = $this->normalize_integer(
+                $filtered_config['markerFocusZoom'],
+                (int) ($fallback_config['markerFocusZoom'] ?? 15),
+                1,
+                19
+            );
+        }
+
+        if (array_key_exists('markerFocusCenter', $filtered_config)) {
+            $config['markerFocusCenter'] = $this->normalize_marker_focus_center(
+                $filtered_config['markerFocusCenter'],
+                $fallback_config['markerFocusCenter'] ?? null
+            );
         }
 
         if (isset($filtered_config['mapOptions']) && is_array($filtered_config['mapOptions'])) {

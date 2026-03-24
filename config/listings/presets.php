@@ -37,6 +37,13 @@ if (!defined('ABSPATH')) {
 | 'showPagination' => bool
 | 'pageSize' => int
 |   Use 0 or a non-positive value to disable pagination.
+| 'stickyMap' => bool
+| 'paginationMode' => 'pages' | 'infinite'
+| 'fullHeightMap' => bool
+| 'minDesktopColumns' => int
+| 'maxDesktopColumns' => int
+| 'markerFocusZoom' => int
+| 'markerFocusCenter' => [float $lat, float $lng] | null
 |
 | 'searchWidget' => [
 |   This config is only for the search widget embedded inside listings.
@@ -75,6 +82,11 @@ if (!defined('ABSPATH')) {
 |     'showSort' => true,
 |     'showPagination' => true,
 |     'pageSize' => 12,
+|     'stickyMap' => true,
+|     'paginationMode' => 'infinite',
+|     'fullHeightMap' => false,
+|     'minDesktopColumns' => 3,
+|     'maxDesktopColumns' => 8,
 |     'searchWidget' => [
 |         'showLocation' => true,
 |         'showFilterButton' => true,
@@ -176,6 +188,11 @@ return [
         'showSort' => true,
         'showPagination' => true,
         'pageSize' => 12,
+        'stickyMap' => true,
+        'paginationMode' => 'infinite',
+        'fullHeightMap' => false,
+        'minDesktopColumns' => 3,
+        'maxDesktopColumns' => 8,
         'searchWidget' => [
             'showLocation' => true,
             'filterDisplayMode' => 'modal',

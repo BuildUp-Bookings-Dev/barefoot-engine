@@ -45,10 +45,10 @@ class Property_Listings_Provider
             return $this->cached_listings;
         }
 
-        $target_date = $this->resolve_target_date();
-        $has_selected_check_in = $this->has_selected_check_in();
         $check_in = $this->resolve_check_in();
         $check_out = $this->resolve_check_out();
+        $target_date = $this->resolve_target_date();
+        $has_selected_check_in = $this->has_selected_check_in();
 
         $posts = get_posts(
             [
@@ -69,7 +69,7 @@ class Property_Listings_Provider
                 continue;
             }
 
-            $listing = $this->build_listing($post, $target_date, $has_selected_check_in);
+            $listing = $this->build_listing($post, $target_date, $has_selected_check_in, $check_in, $check_out);
             if ($listing !== null) {
                 $listings[] = $listing;
             }
@@ -150,7 +150,13 @@ class Property_Listings_Provider
     /**
      * @return array<string, mixed>|null
      */
-    private function build_listing(\WP_Post $post, string $target_date, bool $has_selected_check_in): ?array
+    private function build_listing(
+        \WP_Post $post,
+        string $target_date,
+        bool $has_selected_check_in,
+        string $check_in,
+        string $check_out
+    ): ?array
     {
         $fields = get_post_meta($post->ID, '_be_property_fields', true);
         if (!is_array($fields)) {
@@ -169,7 +175,7 @@ class Property_Listings_Provider
         $bathrooms = $this->resolve_bathrooms($post, $fields);
         $property_type = $this->clean_string($fields['PropertyType'] ?? '');
         $coordinates = $this->resolve_coordinates($fields);
-        $pricing_data = $this->resolve_pricing_data($post, $target_date, $has_selected_check_in);
+        $pricing_data = $this->resolve_pricing_data($post, $target_date, $has_selected_check_in, $check_in, $check_out);
 
         if ($guest_count === null && $property_type === '' && $coordinates === null) {
             return null;
@@ -482,7 +488,13 @@ class Property_Listings_Provider
     /**
      * @return array<string, mixed>|null
      */
-    private function resolve_pricing_data(\WP_Post $post, string $target_date, bool $has_selected_check_in): ?array
+    private function resolve_pricing_data(
+        \WP_Post $post,
+        string $target_date,
+        bool $has_selected_check_in,
+        string $check_in,
+        string $check_out
+    ): ?array
     {
         $rates = get_post_meta($post->ID, '_be_property_rates', true);
         if (!is_array($rates) || $rates === []) {
@@ -491,10 +503,27 @@ class Property_Listings_Provider
 
         $pricing_data = [
             'targetDate' => $target_date,
+            'checkIn' => $check_in,
+            'checkOut' => $check_out,
             'selectedType' => '',
             'rates' => $rates,
             'isStartingPrice' => !$has_selected_check_in,
         ];
+
+        if ($this->has_valid_date_range($check_in, $check_out)) {
+            $stay_pricing = $this->calculate_stay_pricing($rates, $check_in, $check_out);
+            if ($stay_pricing === null) {
+                return $pricing_data;
+            }
+
+            $pricing_data['selectedType'] = 'stay_total';
+            $pricing_data['price'] = $stay_pricing['total'];
+            $pricing_data['pricePeriod'] = $this->format_night_period((int) $stay_pricing['nights']);
+            $pricing_data['nights'] = $stay_pricing['nights'];
+            $pricing_data['nightlyPrices'] = $stay_pricing['nightlyPrices'];
+
+            return $pricing_data;
+        }
 
         $selected_rate = $has_selected_check_in
             ? $this->find_matching_rate($rates, $target_date)
@@ -526,6 +555,69 @@ class Property_Listings_Provider
             );
 
         return $pricing_data;
+    }
+
+    /**
+     * @param array<string, mixed> $rates
+     * @return array{total: float, nights: int, nightlyPrices: array<string, float>}|null
+     */
+    private function calculate_stay_pricing(array $rates, string $check_in, string $check_out): ?array
+    {
+        if (!$this->has_valid_date_range($check_in, $check_out)) {
+            return null;
+        }
+
+        $cursor = \DateTimeImmutable::createFromFormat('!Y-m-d', $check_in, wp_timezone());
+        $checkout_date = \DateTimeImmutable::createFromFormat('!Y-m-d', $check_out, wp_timezone());
+
+        if (!$cursor instanceof \DateTimeImmutable || !$checkout_date instanceof \DateTimeImmutable) {
+            return null;
+        }
+
+        $nightly_prices = [];
+        $total = 0.0;
+        $nights = 0;
+
+        while ($cursor < $checkout_date) {
+            $target_date = $cursor->format('Y-m-d');
+            $rate = $this->find_matching_rate($rates, $target_date);
+
+            if ($rate === null) {
+                return null;
+            }
+
+            $amount = isset($rate['amount']) && is_numeric($rate['amount'])
+                ? (float) $rate['amount']
+                : null;
+
+            if ($amount === null || $amount <= 0) {
+                return null;
+            }
+
+            $nightly_prices[$target_date] = round($amount, 2);
+            $total += $amount;
+            $nights++;
+            $cursor = $cursor->modify('+1 day');
+        }
+
+        if ($nights <= 0) {
+            return null;
+        }
+
+        return [
+            'total' => round($total, 2),
+            'nights' => $nights,
+            'nightlyPrices' => $nightly_prices,
+        ];
+    }
+
+    private function format_night_period(int $nights): string
+    {
+        return sprintf(
+            /* translators: %d is the number of booked nights in the selected stay. */
+            _n('for %d night', 'for %d nights', $nights, 'barefoot-engine'),
+            $nights
+        );
     }
 
     /**
@@ -682,6 +774,15 @@ class Property_Listings_Provider
         }
 
         return $target_weekday >= $week_start || $target_weekday <= $week_end;
+    }
+
+    private function has_valid_date_range(string $check_in, string $check_out): bool
+    {
+        if (!$this->is_valid_ymd_date($check_in) || !$this->is_valid_ymd_date($check_out)) {
+            return false;
+        }
+
+        return $check_out > $check_in;
     }
 
     private function normalize_weekday(string $value): ?int
