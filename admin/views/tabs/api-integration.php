@@ -54,7 +54,7 @@ if (!defined('ABSPATH')) {
             </template>
         </label>
 
-        <div class="be-section">
+        <div class="be-section be-section-offset-top">
             <h3 class="be-section-title">
                 <span class="material-symbols-outlined" aria-hidden="true">tune</span>
                 <?php echo esc_html__('Booking Controls', 'barefoot-engine'); ?>

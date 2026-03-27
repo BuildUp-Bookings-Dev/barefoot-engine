@@ -74,6 +74,7 @@ class Plugin
     {
         $public = new Frontend();
         $booking_confirmation_page = new Booking_Confirmation_Page($this->get_property_booking_checkout_service());
+        $page_hero_template = new Page_Hero_Template();
         $featured_properties_elementor = new Featured_Properties_Elementor();
         $listings_preset_registry = new Listings_Preset_Registry();
         $search_preset_registry = new Search_Widget_Preset_Registry();
@@ -104,6 +105,7 @@ class Plugin
         $this->loader->add_action('plugins_loaded', $featured_properties_elementor, 'register', 20, 0);
         $this->loader->add_action('wp_enqueue_scripts', $public, 'enqueue_assets');
         $this->loader->add_action('wp_head', $public, 'render_custom_css', 20, 0);
+        $this->loader->add_action('elementor/frontend/container/before_render', $page_hero_template, 'maybe_apply_featured_image', 10, 1);
         $this->loader->add_action('template_redirect', $booking_confirmation_page, 'maybe_handle_ics_download', 0, 0);
         $this->loader->add_filter('query_vars', $booking_confirmation_page, 'register_query_vars', 10, 1);
         $this->loader->add_filter('script_loader_tag', $public, 'mark_module_scripts', 10, 3);
