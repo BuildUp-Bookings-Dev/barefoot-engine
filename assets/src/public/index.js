@@ -2,6 +2,7 @@ import { BPCalendar, BP_Calendar } from '@braudypedrosa/bp-calendar';
 import listingsMapModule from './bp-listings-runtime.js';
 import { bootBookingCheckoutWidgets } from './booking-checkout.js';
 import { bootFeaturedProperties } from './featured-properties.js';
+import { bootPropertyGrid } from './property-grid.js';
 import { BPSearchWidget, BP_SearchWidget } from '@braudypedrosa/bp-search-widget';
 
 const SEARCH_WIDGET_SELECTOR = '[data-be-search-widget]';
@@ -2921,6 +2922,8 @@ function escapeHtml(value) {
 
 let elementorFeaturedHooksBound = false;
 let elementorFeaturedObserver = null;
+let elementorPropertyGridHooksBound = false;
+let elementorPropertyGridObserver = null;
 
 function registerElementorFeaturedPreviewBoot() {
   if (typeof window === 'undefined') {
@@ -3017,6 +3020,100 @@ function registerElementorFeaturedPreviewBoot() {
 
 registerElementorFeaturedPreviewBoot();
 
+function registerElementorPropertyGridPreviewBoot() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const ensureObserver = () => {
+    if (elementorPropertyGridObserver || typeof window.MutationObserver !== 'function' || !(document.body instanceof HTMLElement)) {
+      return;
+    }
+
+    let rafId = 0;
+    const queueBoot = () => {
+      if (rafId) {
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        bootPropertyGrid();
+      });
+    };
+
+    elementorPropertyGridObserver = new window.MutationObserver((mutations) => {
+      const shouldBoot = mutations.some((mutation) => {
+        if (!mutation || mutation.type !== 'childList' || mutation.addedNodes.length === 0) {
+          return false;
+        }
+
+        return Array.from(mutation.addedNodes).some((node) => {
+          if (!(node instanceof HTMLElement)) {
+            return false;
+          }
+
+          return node.matches?.('[data-be-property-grid]') || Boolean(node.querySelector?.('[data-be-property-grid]'));
+        });
+      });
+
+      if (shouldBoot) {
+        queueBoot();
+      }
+    });
+
+    elementorPropertyGridObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    bootPropertyGrid();
+  };
+
+  const bindHooks = () => {
+    if (elementorPropertyGridHooksBound) {
+      return;
+    }
+
+    const frontend = window.elementorFrontend;
+    if (!frontend || !frontend.hooks || typeof frontend.hooks.addAction !== 'function') {
+      ensureObserver();
+      return;
+    }
+
+    const reinitializePropertyGrid = () => {
+      bootPropertyGrid();
+    };
+
+    frontend.hooks.addAction('frontend/element_ready/barefoot-property-grid.default', reinitializePropertyGrid);
+    frontend.hooks.addAction('frontend/element_ready/global', reinitializePropertyGrid);
+    ensureObserver();
+    elementorPropertyGridHooksBound = true;
+  };
+
+  const isElementorPreviewFrame = (() => {
+    try {
+      return Boolean(window.frameElement && window.frameElement.id === 'elementor-preview-iframe');
+    } catch (error) {
+      return false;
+    }
+  })();
+
+  if (window.jQuery && typeof window.jQuery === 'function') {
+    window.jQuery(window).on('elementor/frontend/init', bindHooks);
+  } else {
+    window.addEventListener('elementor/frontend/init', bindHooks);
+  }
+
+  if (isElementorPreviewFrame) {
+    ensureObserver();
+  }
+
+  bindHooks();
+}
+
+registerElementorPropertyGridPreviewBoot();
+
 if (document.readyState === 'loading') {
   document.addEventListener(
     'DOMContentLoaded',
@@ -3027,6 +3124,7 @@ if (document.readyState === 'loading') {
       bootBookingWidgets();
       bootBookingCheckoutWidgets();
       bootFeaturedProperties();
+      bootPropertyGrid();
     },
     { once: true },
   );
@@ -3037,4 +3135,5 @@ if (document.readyState === 'loading') {
   bootBookingWidgets();
   bootBookingCheckoutWidgets();
   bootFeaturedProperties();
+  bootPropertyGrid();
 }

@@ -5,10 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- Added a new `Property Grid` shortcode and Elementor widget for rendering all active properties with responsive columns, optional filters, and client-side pagination.
 
 ### Changed
+- Updated the public asset boot flow so the new Property Grid widget initializes reliably in Elementor preview and on the frontend.
 
 ### Fixed
+- Fixed Property Grid card spacing and metadata layout to better match the Featured Properties card language.
+- Fixed long Property Grid pagination strips by switching to a compact page-number window and displaying the filtered property count.
 
 ### Security
 

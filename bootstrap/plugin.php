@@ -29,6 +29,8 @@ use BarefootEngine\Widgets\BookingCheckout\Booking_Checkout_Preset_Registry;
 use BarefootEngine\Widgets\BookingCheckout\Booking_Checkout_Shortcode;
 use BarefootEngine\Widgets\FeaturedProperties\Featured_Properties_Shortcode;
 use BarefootEngine\Widgets\FeaturedProperties\Featured_Properties_Elementor;
+use BarefootEngine\Widgets\PropertyGrid\Property_Grid_Elementor;
+use BarefootEngine\Widgets\PropertyGrid\Property_Grid_Shortcode;
 use BarefootEngine\Widgets\Listings\Listings_Preset_Registry;
 use BarefootEngine\Widgets\Listings\Listings_Shortcode;
 use BarefootEngine\Widgets\Pricing\Pricing_Table_Shortcode;
@@ -76,6 +78,7 @@ class Plugin
         $booking_confirmation_page = new Booking_Confirmation_Page($this->get_property_booking_checkout_service());
         $page_hero_template = new Page_Hero_Template();
         $featured_properties_elementor = new Featured_Properties_Elementor();
+        $property_grid_elementor = new Property_Grid_Elementor();
         $listings_preset_registry = new Listings_Preset_Registry();
         $search_preset_registry = new Search_Widget_Preset_Registry();
         $booking_preset_registry = new Booking_Widget_Preset_Registry();
@@ -87,6 +90,7 @@ class Plugin
             $search_preset_registry
         );
         $featured_properties_shortcode = new Featured_Properties_Shortcode($property_listings_provider);
+        $property_grid_shortcode = new Property_Grid_Shortcode($property_listings_provider);
         $shortcode = new Search_Widget_Shortcode($search_preset_registry);
         $booking_shortcode = new Booking_Widget_Shortcode($booking_preset_registry);
         $booking_checkout_shortcode = new Booking_Checkout_Shortcode(
@@ -97,12 +101,14 @@ class Plugin
 
         $this->loader->add_action('init', $listings_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $featured_properties_shortcode, 'register', 10, 0);
+        $this->loader->add_action('init', $property_grid_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $booking_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $booking_checkout_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $pricing_table_shortcode, 'register', 10, 0);
         $this->loader->add_action('init', $booking_confirmation_page, 'register_rewrite_rules', 10, 0);
         $this->loader->add_action('plugins_loaded', $featured_properties_elementor, 'register', 20, 0);
+        $this->loader->add_action('plugins_loaded', $property_grid_elementor, 'register', 20, 0);
         $this->loader->add_action('wp_enqueue_scripts', $public, 'enqueue_assets');
         $this->loader->add_action('wp_head', $public, 'render_custom_css', 20, 0);
         $this->loader->add_action('elementor/frontend/container/before_render', $page_hero_template, 'maybe_apply_featured_image', 10, 1);

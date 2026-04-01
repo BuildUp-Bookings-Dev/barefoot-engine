@@ -118,6 +118,11 @@ if (!defined('ABSPATH')) {
                     <td><?php echo esc_html__('Featured properties slider.', 'barefoot-engine'); ?></td>
                     <td><?php echo esc_html__('Supports the limit attribute and featured-only property output.', 'barefoot-engine'); ?></td>
                 </tr>
+                <tr>
+                    <td><code>[barefoot_property_grid]</code></td>
+                    <td><?php echo esc_html__('Property grid with optional filters and page-number pagination.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Useful for Elementor layouts or landing pages that need all active properties.', 'barefoot-engine'); ?></td>
+                </tr>
             </tbody>
         </table>
     </div>
