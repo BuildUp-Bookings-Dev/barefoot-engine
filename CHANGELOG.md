@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Security
+
+## [1.0.1] - 2026-04-01
+
+### Added
 - Added a new `Property Grid` shortcode and Elementor widget for rendering all active properties with responsive columns, optional filters, and client-side pagination.
 
 ### Changed
