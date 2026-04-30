@@ -405,6 +405,12 @@ class Property_Listings_Provider
             $filter_values['amenities'] = $amenities;
         }
 
+        $view = $this->resolve_view_from_amenities($amenities);
+        if ($view !== '') {
+            $field_values['view'] = $view;
+            $filter_values['view'] = $view;
+        }
+
         if ($property_type !== '') {
             $filter_values['type'] = $property_type;
         }
@@ -1061,6 +1067,26 @@ class Property_Listings_Provider
         sort($labels, SORT_NATURAL | SORT_FLAG_CASE);
 
         return $labels;
+    }
+
+    /**
+     * @param array<int, string> $amenities
+     */
+    private function resolve_view_from_amenities(array $amenities): string
+    {
+        foreach ($amenities as $amenity) {
+            if (stripos($amenity, 'golf') !== false) {
+                return 'Golf Course';
+            }
+        }
+
+        foreach ($amenities as $amenity) {
+            if (stripos($amenity, 'pool') !== false) {
+                return 'Poolview';
+            }
+        }
+
+        return '';
     }
 
     /**

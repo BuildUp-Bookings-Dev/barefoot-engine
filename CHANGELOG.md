@@ -12,6 +12,18 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
+## [1.0.2] - 2026-04-30
+
+### Added
+
+### Changed
+- Updated the default search widget to offer a View dropdown with Golf Course and Poolview options in place of the Bathrooms dropdown.
+- Added view-aware search matching so Golf Course and Poolview searches can match properties through their synced amenities.
+
+### Fixed
+
+### Security
+
 ## [1.0.1] - 2026-04-01
 
 ### Added

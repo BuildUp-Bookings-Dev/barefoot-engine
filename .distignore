@@ -7,6 +7,11 @@ assets/src
 .build
 scripts
 tests
+output
+.playwright-cli
+playwright-report
+tests-output
+.playwright
 phpcs.xml.dist
 vite.config.js
 npm-debug.log
