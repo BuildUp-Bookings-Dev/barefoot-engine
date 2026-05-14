@@ -75,8 +75,8 @@ if (!defined('ABSPATH')) {
 | 'search-results' => [
 |     'currency' => '$',
 |     'mapOptions' => [
-|         'center' => [14.12, 120.97],
-|         'zoom' => 10,
+|         'center' => [33.944765, -78.578097],
+|         'zoom' => 15,
 |     ],
 |     'showMapToggle' => true,
 |     'showSort' => true,
@@ -181,8 +181,8 @@ return [
         'listings' => [],
         'currency' => '$',
         'mapOptions' => [
-            'center' => [14.55, 121.03],
-            'zoom' => 12,
+            'center' => [33.944765, -78.578097],
+            'zoom' => 15,
         ],
         'showMapToggle' => true,
         'showSort' => true,
@@ -230,11 +230,11 @@ return [
                     'key' => 'type',
                 ],
                 [
-                    'label' => 'Bedrooms',
+                    'label' => 'View',
                     'type' => 'select',
-                    'options' => ['1', '2', '3', '4', '5', '6', '7', '8+'],
+                    'options' => ['Golf Course', 'Poolview'],
                     'required' => false,
-                    'key' => 'bedrooms',
+                    'key' => 'view',
                 ],
                 [
                     'label' => 'Bathrooms',
@@ -242,6 +242,13 @@ return [
                     'options' => ['1', '2', '3', '4', '5', '6+'],
                     'required' => false,
                     'key' => 'bathrooms',
+                ],
+                [
+                    'label' => 'Bedrooms',
+                    'type' => 'select',
+                    'options' => ['1', '2', '3', '4', '5', '6', '7', '8+'],
+                    'required' => false,
+                    'key' => 'bedrooms',
                 ],
                 [
                     'label' => 'Amenities',

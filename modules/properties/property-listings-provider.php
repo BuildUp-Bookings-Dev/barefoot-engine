@@ -393,6 +393,7 @@ class Property_Listings_Provider
         }
 
         if ($bedrooms !== null) {
+            $field_values['bedrooms'] = (string) $bedrooms;
             $filter_values['bedrooms'] = $bedrooms;
         }
 
@@ -405,7 +406,7 @@ class Property_Listings_Provider
             $filter_values['amenities'] = $amenities;
         }
 
-        $view = $this->resolve_view_from_amenities($amenities);
+        $view = $this->resolve_view($fields, $amenities);
         if ($view !== '') {
             $field_values['view'] = $view;
             $filter_values['view'] = $view;
@@ -1087,6 +1088,41 @@ class Property_Listings_Provider
         }
 
         return '';
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @param array<int, string> $amenities
+     */
+    private function resolve_view(array $fields, array $amenities): string
+    {
+        $field_view = $this->normalize_view_label($fields['a261'] ?? '');
+        if ($field_view !== '') {
+            return $field_view;
+        }
+
+        return $this->resolve_view_from_amenities($amenities);
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalize_view_label($value): string
+    {
+        $view = $this->clean_string($value);
+        if ($view === '') {
+            return '';
+        }
+
+        if (stripos($view, 'golf') !== false) {
+            return 'Golf Course';
+        }
+
+        if (stripos($view, 'pool') !== false) {
+            return 'Poolview';
+        }
+
+        return $view;
     }
 
     /**

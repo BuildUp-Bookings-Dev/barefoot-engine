@@ -101,6 +101,28 @@
   text-align: center;
 }
 
+.barefoot-engine-public .bp-search-widget__filter-row:has(.bp-search-widget__filter-card[data-filter-key="amenities"]) {
+  flex-wrap: wrap;
+}
+
+.barefoot-engine-public .bp-search-widget__filter-card[data-filter-key="amenities"] {
+  flex: 1 1 100% !important;
+  max-width: 100% !important;
+  width: 100%;
+}
+
+.barefoot-engine-public .bp-search-widget__filter-card[data-filter-key="amenities"]::after {
+  display: none;
+}
+
+.barefoot-engine-public .bp-search-widget__filter-card[data-filter-key="amenities"] .bp-search-widget__filter-choices {
+  max-height: min(42vh, 430px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+}
+
 .barefoot-engine-listings {
   margin: 0;
   width: 100%;

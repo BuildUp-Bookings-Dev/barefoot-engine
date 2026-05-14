@@ -22,9 +22,9 @@ class Listings_Shortcode
         'widget_id' => 'default',
         'search_widget_id' => '',
         'currency' => '$',
-        'center_lat' => '14.55',
-        'center_lng' => '121.03',
-        'zoom' => '12',
+        'center_lat' => '33.944765',
+        'center_lng' => '-78.578097',
+        'zoom' => '15',
         'show_map_toggle' => 'true',
         'show_sort' => 'true',
         'show_pagination' => 'true',
@@ -278,8 +278,8 @@ class Listings_Shortcode
         }
 
         return [
-            $this->normalize_coordinate($candidate[0], 14.55, -90, 90),
-            $this->normalize_coordinate($candidate[1], 121.03, -180, 180),
+            $this->normalize_coordinate($candidate[0], 33.944765, -90, 90),
+            $this->normalize_coordinate($candidate[1], -78.578097, -180, 180),
         ];
     }
 

@@ -17,8 +17,8 @@ class Listings_Preset_Registry
         'listings' => [],
         'currency' => '$',
         'mapOptions' => [
-            'center' => [14.55, 121.03],
-            'zoom' => 12,
+            'center' => [33.944765, -78.578097],
+            'zoom' => 15,
         ],
         'showMapToggle' => true,
         'showSort' => true,
@@ -72,11 +72,11 @@ class Listings_Preset_Registry
                     'key' => 'type',
                 ],
                 [
-                    'label' => 'Bedrooms',
+                    'label' => 'View',
                     'type' => 'select',
-                    'options' => ['1', '2', '3', '4', '5', '6', '7', '8+'],
+                    'options' => ['Golf Course', 'Poolview'],
                     'required' => false,
-                    'key' => 'bedrooms',
+                    'key' => 'view',
                 ],
                 [
                     'label' => 'Bathrooms',
@@ -84,6 +84,13 @@ class Listings_Preset_Registry
                     'options' => ['1', '2', '3', '4', '5', '6+'],
                     'required' => false,
                     'key' => 'bathrooms',
+                ],
+                [
+                    'label' => 'Bedrooms',
+                    'type' => 'select',
+                    'options' => ['1', '2', '3', '4', '5', '6', '7', '8+'],
+                    'required' => false,
+                    'key' => 'bedrooms',
                 ],
                 [
                     'label' => 'Amenities',
@@ -220,8 +227,8 @@ class Listings_Preset_Registry
 
             if (is_array($center) && count($center) >= 2) {
                 $map_options['center'] = [
-                    $this->normalize_coordinate($center[0], 14.55, -90, 90),
-                    $this->normalize_coordinate($center[1], 121.03, -180, 180),
+                    $this->normalize_coordinate($center[0], 33.944765, -90, 90),
+                    $this->normalize_coordinate($center[1], -78.578097, -180, 180),
                 ];
             }
 
@@ -421,8 +428,8 @@ class Listings_Preset_Registry
         }
 
         return [
-            $this->normalize_coordinate($value[0], 14.55, -90, 90),
-            $this->normalize_coordinate($value[1], 121.03, -180, 180),
+            $this->normalize_coordinate($value[0], 33.944765, -90, 90),
+            $this->normalize_coordinate($value[1], -78.578097, -180, 180),
         ];
     }
 

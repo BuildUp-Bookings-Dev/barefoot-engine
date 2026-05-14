@@ -96,7 +96,10 @@ function bootListingsWidgets() {
     const allListings = Array.isArray(config.listings) ? config.listings : [];
     const searchWidgetConfig = isPlainObject(config.searchWidget) ? config.searchWidget : null;
     const fieldTypeMap = buildFieldTypeMap(searchWidgetConfig);
-    const initialSearchPayload = parseSearchPayloadFromUrl(window.location.search);
+    const initialSearchPayload = normalizeSearchPayloadForWidget(
+      parseSearchPayloadFromUrl(window.location.search),
+      searchWidgetConfig,
+    );
     const hasInitialSearch = hasSearchPayload(initialSearchPayload);
     const hasInitialWidgetValues = hasInitialSearch
       || !isEmptyValue(initialSearchPayload.checkIn)
@@ -153,7 +156,7 @@ function bootListingsWidgets() {
           : undefined,
         onListingClick: (listing) => {
           if (typeof listing?.permalink === 'string' && listing.permalink.trim() !== '') {
-            window.location.assign(listing.permalink);
+            window.location.assign(buildListingBookingHandoffUrl(listing.permalink, window.location.search));
           }
         },
       });
@@ -216,6 +219,31 @@ function redirectToSearchResults(targetUrl, payload) {
 
   url.search = params.toString();
   window.location.assign(url.toString());
+}
+
+function buildListingBookingHandoffUrl(permalink, search) {
+  let url;
+  try {
+    url = new URL(permalink, window.location.origin);
+  } catch (error) {
+    console.warn('[barefoot-engine] Invalid listing permalink.', error);
+    return permalink;
+  }
+
+  const handoffState = parseBookingHandoffFromSearch(search);
+  if (handoffState.checkIn) {
+    url.searchParams.set('check_in', handoffState.checkIn);
+  }
+
+  if (handoffState.checkOut) {
+    url.searchParams.set('check_out', handoffState.checkOut);
+  }
+
+  if (handoffState.guests) {
+    url.searchParams.set('guests', handoffState.guests);
+  }
+
+  return url.toString();
 }
 
 function clearManagedParams(params) {
@@ -336,6 +364,49 @@ function parseSearchPayloadFromUrl(search) {
   });
 
   return payload;
+}
+
+function normalizeSearchPayloadForWidget(payload, searchWidgetConfig) {
+  const normalized = {
+    location: typeof payload?.location === 'string' ? payload.location : '',
+    checkIn: normalizeDateInput(payload?.checkIn),
+    checkOut: normalizeDateInput(payload?.checkOut),
+    customFields: isPlainObject(payload?.customFields) ? { ...payload.customFields } : {},
+    filters: isPlainObject(payload?.filters) ? { ...payload.filters } : {},
+  };
+
+  const fieldKeys = new Set();
+  const filterKeys = new Set();
+
+  if (Array.isArray(searchWidgetConfig?.fields)) {
+    searchWidgetConfig.fields.forEach((field) => {
+      if (isPlainObject(field) && typeof field.key === 'string' && field.key.trim() !== '') {
+        fieldKeys.add(field.key.trim());
+      }
+    });
+  }
+
+  if (Array.isArray(searchWidgetConfig?.filters)) {
+    searchWidgetConfig.filters.forEach((filter) => {
+      if (isPlainObject(filter) && typeof filter.key === 'string' && filter.key.trim() !== '') {
+        filterKeys.add(filter.key.trim());
+      }
+    });
+  }
+
+  Object.entries(normalized.customFields).forEach(([key, value]) => {
+    if (!fieldKeys.has(key) && filterKeys.has(key) && isEmptyValue(normalized.filters[key])) {
+      normalized.filters[key] = value;
+    }
+  });
+
+  Object.entries(normalized.filters).forEach(([key, value]) => {
+    if (!filterKeys.has(key) && fieldKeys.has(key) && isEmptyValue(normalized.customFields[key])) {
+      normalized.customFields[key] = value;
+    }
+  });
+
+  return normalized;
 }
 
 function normalizeDateInput(value) {
@@ -744,18 +815,30 @@ function matchListing(listing, payload, fieldTypeMap) {
   }
 
   for (const [key, value] of Object.entries(payload.customFields || {})) {
-    if (!matchValue(key, fieldTypeMap.get(key), fieldValues[key], value)) {
+    if (!matchValue(key, fieldTypeMap.get(key), getSearchValue(key, fieldValues, filterValues), value)) {
       return false;
     }
   }
 
   for (const [key, value] of Object.entries(payload.filters || {})) {
-    if (!matchValue(key, fieldTypeMap.get(key), filterValues[key], value)) {
+    if (!matchValue(key, fieldTypeMap.get(key), getSearchValue(key, filterValues, fieldValues), value)) {
       return false;
     }
   }
 
   return true;
+}
+
+function getSearchValue(key, primaryValues, fallbackValues) {
+  if (isPlainObject(primaryValues) && Object.prototype.hasOwnProperty.call(primaryValues, key)) {
+    return primaryValues[key];
+  }
+
+  if (isPlainObject(fallbackValues) && Object.prototype.hasOwnProperty.call(fallbackValues, key)) {
+    return fallbackValues[key];
+  }
+
+  return undefined;
 }
 
 function matchValue(key, type, listingValue, submittedValue) {
@@ -768,8 +851,12 @@ function matchValue(key, type, listingValue, submittedValue) {
   }
 
   if (type === 'select' || type === 'radio') {
-    if (isAtLeastNumericKey(key) && hasNumericValue(listingValue) && hasNumericValue(submittedValue)) {
+    if ((isAtLeastNumericKey(key) || isPlusNumericValue(submittedValue)) && hasNumericValue(listingValue) && hasNumericValue(submittedValue)) {
       return matchesNumericAtLeast(listingValue, submittedValue);
+    }
+
+    if (hasNumericValue(listingValue) && hasNumericValue(submittedValue)) {
+      return matchesNumericExact(listingValue, submittedValue);
     }
 
     return matchesExact(listingValue, submittedValue);
@@ -828,6 +915,21 @@ function matchesNumericAtLeast(haystackValue, needleValue) {
   }
 
   return numericHaystack >= numericNeedle;
+}
+
+function matchesNumericExact(haystackValue, needleValue) {
+  const numericHaystack = extractNumericValue(haystackValue);
+  const numericNeedle = extractNumericValue(needleValue);
+
+  if (!Number.isFinite(numericNeedle)) {
+    return true;
+  }
+
+  if (!Number.isFinite(numericHaystack)) {
+    return false;
+  }
+
+  return numericHaystack === numericNeedle;
 }
 
 function matchesAvailability(availability, checkIn, checkOut) {
@@ -896,6 +998,14 @@ function hasNumericValue(value) {
   return Number.isFinite(extractNumericValue(value));
 }
 
+function isPlusNumericValue(value) {
+  if (Array.isArray(value)) {
+    return value.some((entry) => isPlusNumericValue(entry));
+  }
+
+  return typeof value === 'string' && /\d\s*\+\s*$/.test(value.trim());
+}
+
 function isGuestKey(key) {
   return typeof key === 'string' && /(guest|occupancy)/i.test(key);
 }
@@ -905,7 +1015,7 @@ function isAtLeastNumericKey(key) {
     return true;
   }
 
-  return typeof key === 'string' && /(bedroom|bedrooms|bathroom|bathrooms|beds|baths)/i.test(key);
+  return false;
 }
 
 function isPlainObject(value) {
@@ -1937,6 +2047,7 @@ function initializeBookingWidget(mountNode, config) {
   }
 
   const runtime = buildBookingRuntime(config);
+  const initialSearch = parseBookingHandoffFromSearch(window.location.search);
   mountNode.innerHTML = runtime.markup;
 
   const calendarHost = mountNode.querySelector('.barefoot-engine-booking-widget__calendar-host');
@@ -1967,7 +2078,10 @@ function initializeBookingWidget(mountNode, config) {
     return;
   }
 
-  const initialGuestValue = resolveInitialGuestValue(runtime.guestOptions, runtime.defaultGuestValue);
+  const initialGuestValue = resolveInitialGuestValue(
+    runtime.guestOptions,
+    initialSearch.guests || runtime.defaultGuestValue,
+  );
   guestsSelect.innerHTML = runtime.guestOptions
     .map((optionValue) => {
       const escapedValue = escapeHtml(optionValue);
@@ -1998,8 +2112,8 @@ function initializeBookingWidget(mountNode, config) {
     dailyPrices: new Map(),
     loadedCalendarRangeKeys: new Set(),
     calendarFetchInFlightKey: '',
-    checkIn: '',
-    checkOut: '',
+    checkIn: initialSearch.checkIn,
+    checkOut: initialSearch.checkOut,
     quoteTimer: null,
     quoteRequestToken: 0,
     bookNowRequestInFlight: false,
@@ -2017,6 +2131,13 @@ function initializeBookingWidget(mountNode, config) {
     return;
   }
 
+  const selectedRange = initialSearch.checkIn && initialSearch.checkOut
+    ? {
+      start: parseYmdDate(initialSearch.checkIn),
+      end: parseYmdDate(initialSearch.checkOut),
+    }
+    : null;
+
   const calendar = new BPCalendar(calendarHost, {
     mode: 'datepicker',
     monthsToShow: runtime.calendarOptions.monthsToShow,
@@ -2025,6 +2146,7 @@ function initializeBookingWidget(mountNode, config) {
     tooltipLabel: runtime.calendarOptions.tooltipLabel,
     showTooltip: runtime.calendarOptions.showTooltip,
     showClearButton: runtime.calendarOptions.showClearButton,
+    selectedRange: selectedRange?.start instanceof Date && selectedRange?.end instanceof Date ? selectedRange : null,
     dateConfig: {},
     onRangeSelect: (range) => {
       handleBookingRangeSelect(state, range);
@@ -2048,10 +2170,24 @@ function initializeBookingWidget(mountNode, config) {
   renderBookingTotals(state, null);
   refreshBookingCalendarAvailability(state, true);
 
+  if (state.checkIn && state.checkOut) {
+    scheduleBookingQuoteCheck(state);
+  }
+
   bookNowButton.addEventListener('click', (event) => {
     event.preventDefault();
     startBookingSessionAndNavigate(state);
   });
+}
+
+function parseBookingHandoffFromSearch(search) {
+  const params = new URLSearchParams(search || '');
+
+  return {
+    checkIn: normalizeDateInput(params.get('check_in')),
+    checkOut: normalizeDateInput(params.get('check_out')),
+    guests: sanitizeBookingText(params.get('guests'), ''),
+  };
 }
 
 function buildBookingRuntime(config) {
