@@ -1649,7 +1649,36 @@ function clearEmbeddedSearchInputs(mountNode) {
     widget.render();
   }
 
+  resetListingsSearchResults(mountNode);
+}
+
+function resetListingsSearchResults(mountNode) {
+  if (!(mountNode instanceof HTMLElement)) {
+    return;
+  }
+
+  const allListings = Array.isArray(mountNode.beAllListings) ? mountNode.beAllListings : [];
   mountNode.beHasActiveSearch = false;
+  mountNode.classList.add('be-listings-initial-pricing');
+
+  if (Number.isFinite(Number(mountNode.beSearchToken))) {
+    mountNode.beSearchToken = Number(mountNode.beSearchToken) + 1;
+  }
+
+  setListingsSearching(mountNode, false);
+
+  if (mountNode.beListingsWidget && typeof mountNode.beListingsWidget.setListings === 'function') {
+    mountNode.beListingsWidget.setListings(allListings);
+  }
+
+  updateListingsCount(mountNode, allListings.length);
+  syncSearchPayloadToCurrentUrl({
+    location: '',
+    checkIn: '',
+    checkOut: '',
+    customFields: {},
+    filters: {},
+  });
   updateClearSearchButton(mountNode);
 }
 

@@ -16,7 +16,7 @@ const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const currentVersion = packageJson.version;
 
 function bumpVersion(version, bump) {
-  if (/^\d+\.\d+\.\d+$/.test(bump)) {
+  if (/^\d+\.\d+\.\d+(?:\.\d+)?$/.test(bump)) {
     return bump;
   }
 
@@ -44,16 +44,16 @@ fs.writeFileSync(composerFilePath, `${JSON.stringify(composerJson, null, 2)}\n`)
 
 const pluginFile = fs
   .readFileSync(pluginFilePath, 'utf8')
-  .replace(/Version:\s+\d+\.\d+\.\d+/u, `Version:     ${nextVersion}`)
+  .replace(/Version:\s+\d+\.\d+\.\d+(?:\.\d+)?/u, `Version:     ${nextVersion}`)
   .replace(
-    /define\('BAREFOOT_ENGINE_VERSION', '\d+\.\d+\.\d+'\);/u,
+    /define\('BAREFOOT_ENGINE_VERSION', '\d+\.\d+\.\d+(?:\.\d+)?'\);/u,
     `define('BAREFOOT_ENGINE_VERSION', '${nextVersion}');`
   );
 fs.writeFileSync(pluginFilePath, pluginFile);
 
 const readme = fs
   .readFileSync(readmePath, 'utf8')
-  .replace(/Stable tag:\s+\d+\.\d+\.\d+/u, `Stable tag: ${nextVersion}`);
+  .replace(/Stable tag:\s+\d+\.\d+\.\d+(?:\.\d+)?/u, `Stable tag: ${nextVersion}`);
 fs.writeFileSync(readmePath, readme);
 
 process.stdout.write(`${nextVersion}\n`);

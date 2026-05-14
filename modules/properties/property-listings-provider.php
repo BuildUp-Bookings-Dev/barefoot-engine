@@ -75,26 +75,6 @@ class Property_Listings_Provider
             }
         }
 
-        if ($this->availability_service->has_valid_date_range($check_in, $check_out)) {
-            $cached_available_property_ids = $this->availability_service->get_cached_available_property_ids($check_in, $check_out);
-
-            if (is_array($cached_available_property_ids)) {
-                $available_lookup = array_fill_keys($cached_available_property_ids, true);
-                $listings = array_values(
-                    array_filter(
-                        $listings,
-                        static function (array $listing) use ($available_lookup): bool {
-                            $property_id = isset($listing['propertyId']) && is_scalar($listing['propertyId'])
-                                ? trim((string) $listing['propertyId'])
-                                : '';
-
-                            return $property_id !== '' && isset($available_lookup[$property_id]);
-                        }
-                    )
-                );
-            }
-        }
-
         $this->cached_listings = $listings;
 
         return $this->cached_listings;

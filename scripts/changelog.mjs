@@ -7,7 +7,7 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
 const REQUIRED_SECTIONS = ['Added', 'Changed', 'Fixed', 'Security'];
-const VERSION_LABEL_REGEX = /^\d+\.\d+\.\d+$/;
+const VERSION_LABEL_REGEX = /^\d+\.\d+\.\d+(?:\.\d+)?$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const LEVEL_TWO_HEADING_REGEX = /^## \[([^\]]+)\](?: - (\d{4}-\d{2}-\d{2}))?$/;
 
@@ -155,7 +155,7 @@ export function validateStructure(content) {
       }
     } else {
       if (!VERSION_LABEL_REGEX.test(heading.label)) {
-        throw new Error(`Invalid version label "${heading.label}". Use x.y.z format.`);
+        throw new Error(`Invalid version label "${heading.label}". Use x.y.z or x.y.z.w format.`);
       }
 
       if (!DATE_REGEX.test(heading.date)) {
@@ -175,7 +175,7 @@ export function validateStructure(content) {
 
 export function promoteUnreleasedToVersion(content, version, dateISO) {
   if (!VERSION_LABEL_REGEX.test(version)) {
-    throw new Error(`Invalid version "${version}". Use x.y.z.`);
+    throw new Error(`Invalid version "${version}". Use x.y.z or x.y.z.w.`);
   }
 
   if (!DATE_REGEX.test(dateISO)) {
@@ -230,7 +230,7 @@ export function promoteUnreleasedToVersion(content, version, dateISO) {
 
 export function extractVersionNotes(content, version) {
   if (!VERSION_LABEL_REGEX.test(version)) {
-    throw new Error(`Invalid version "${version}". Use x.y.z.`);
+    throw new Error(`Invalid version "${version}". Use x.y.z or x.y.z.w.`);
   }
 
   const lines = splitLines(content);

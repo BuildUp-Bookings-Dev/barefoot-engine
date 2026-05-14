@@ -12,6 +12,18 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
+## [1.0.3.1] - 2026-05-15
+
+### Added
+
+### Changed
+
+### Fixed
+
+- Fixed the listings Clear button so it restores all properties and removes search parameters from the URL.
+
+### Security
+
 ## [1.0.3] - 2026-05-14
 
 ### Added
