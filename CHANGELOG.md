@@ -8,6 +8,16 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+### Fixed
+
+### Security
+
+## [1.0.3] - 2026-05-14
+
+### Added
+
+### Changed
+
 - Improved property search filtering so bedroom, bathroom, view, guest, type, rating, and amenity selections return matching properties more accurately.
 - Updated the listings filter panel layout so amenities stay full width and scroll cleanly inside the modal.
 - Updated property result clicks so selected dates and guest counts carry into the single-property booking widget.
