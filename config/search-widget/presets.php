@@ -161,7 +161,12 @@ return [
             [
                 'label' => 'Bedrooms',
                 'type' => 'select',
-                'options' => ['1', '2', '3', '4+'],
+                'options' => [
+                    ['label' => 'Studio', 'value' => '0'],
+                    '1',
+                    '2',
+                    '3',
+                ],
                 'position' => 'end',
                 'required' => false,
                 'key' => 'bedrooms',

@@ -12,6 +12,18 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
+## [1.0.4] - 2026-05-27
+
+### Added
+
+### Changed
+
+- Updated the default Bedrooms search dropdown to offer Studio, 1, 2, and 3 bedroom options.
+
+### Fixed
+
+### Security
+
 ## [1.0.3.1] - 2026-05-15
 
 ### Added

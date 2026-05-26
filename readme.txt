@@ -4,7 +4,7 @@ Tags: vacation-rental, integrations
 Requires at least: 6.5
 Tested up to: 6.6
 Requires PHP: 8.1
-Stable tag: 1.0.3.1
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -18,6 +18,9 @@ Barefoot Engine connects WordPress with the Barefoot API for vacation rental wor
 2. Activate Barefoot Engine.
 
 == Changelog ==
+= 1.0.4 =
+* Updated the default Bedrooms search dropdown to offer Studio, 1, 2, and 3 bedroom options.
+
 = 1.0.3.1 =
 * Fixed the listings Clear button so it restores all properties and removes search parameters from the URL.
 
