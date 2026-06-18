@@ -2,6 +2,7 @@
 
 namespace BarefootEngine\Core;
 
+use BarefootEngine\Properties\Property_Post_Type;
 use BarefootEngine\Services\General_Settings;
 
 if (!defined('ABSPATH')) {
@@ -55,17 +56,18 @@ class Frontend
                 self::PUBLIC_SCRIPT_HANDLE,
                 'BarefootEnginePublic',
                 [
-                'restBase' => esc_url_raw(rest_url('barefoot-engine/v1/')),
-                'availabilitySearchEndpoint' => 'availability/search',
-                'availabilityPreflightEndpoint' => 'availability/preflight',
-                'bookingCalendarEndpoint' => 'booking/calendar',
-                'bookingQuoteEndpoint' => 'booking/quote',
-                'bookingCheckoutStartEndpoint' => 'booking-checkout/start',
-                'bookingCheckoutSessionEndpoint' => 'booking-checkout/session',
-                'bookingCheckoutCompleteEndpoint' => 'booking-checkout/complete',
-            ]
-        );
-    }
+                    'restBase' => esc_url_raw(rest_url('barefoot-engine/v1/')),
+                    'availabilitySearchEndpoint' => 'availability/search',
+                    'availabilityPreflightEndpoint' => 'availability/preflight',
+                    'bookingCalendarEndpoint' => 'booking/calendar',
+                    'bookingQuoteEndpoint' => 'booking/quote',
+                    'bookingCheckoutStartEndpoint' => 'booking-checkout/start',
+                    'bookingCheckoutSessionEndpoint' => 'booking-checkout/session',
+                    'bookingCheckoutCompleteEndpoint' => 'booking-checkout/complete',
+                    'tracking' => $this->build_tracking_config($settings),
+                ]
+            );
+        }
     }
 
     public function mark_module_scripts(string $tag, string $handle, string $src): string
@@ -79,6 +81,63 @@ class Frontend
             esc_url($src),
             esc_attr($handle)
         );
+    }
+
+    public function render_tracking_head(): void
+    {
+        if (is_admin()) {
+            return;
+        }
+
+        $settings = $this->general_settings->get_settings();
+        $tracking = $this->get_tracking_settings($settings);
+        if (empty($tracking['enabled'])) {
+            return;
+        }
+
+        $google_tag_id = (string) ($tracking['google_tag_id'] ?? '');
+        echo '<script class="be-tracking-init">window.dataLayer=window.dataLayer||[];</script>' . PHP_EOL;
+
+        if ($google_tag_id === '') {
+            return;
+        }
+
+        if (str_starts_with($google_tag_id, 'GTM-')) {
+            ?>
+            <script class="be-google-tag-manager" data-be-google-tag-id="<?php echo esc_attr($google_tag_id); ?>">
+                (function(w,d,s,l,i){w[l]=Array.isArray(w[l])?w[l]:[];var id='id='+encodeURIComponent(i);var hasExisting=Array.prototype.some.call(d.scripts,function(script){var src=script.src||'';return src.indexOf('googletagmanager.com/gtm.js')!==-1&&src.indexOf(id)!==-1;});if(hasExisting){return;}w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!=='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+encodeURIComponent(i)+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer',<?php echo wp_json_encode($google_tag_id); ?>);
+            </script>
+            <?php
+            return;
+        }
+
+        ?>
+        <script class="be-google-tag-config" data-be-google-tag-id="<?php echo esc_attr($google_tag_id); ?>">
+            (function(w,d,i){w.dataLayer=Array.isArray(w.dataLayer)?w.dataLayer:[];if(typeof w.gtag!=='function'){w.gtag=function(){w.dataLayer.push(arguments);};}var id='id='+encodeURIComponent(i);var hasExisting=Array.prototype.some.call(d.scripts,function(script){var src=script.src||'';return src.indexOf('googletagmanager.com/gtag/js')!==-1&&src.indexOf(id)!==-1;});if(!hasExisting){var first=d.getElementsByTagName('script')[0],tag=d.createElement('script');tag.async=true;tag.className='be-google-tag';tag.src='https://www.googletagmanager.com/gtag/js?id='+encodeURIComponent(i);first.parentNode.insertBefore(tag,first);}var hasJs=w.dataLayer.some(function(entry){return entry&&entry[0]==='js';});if(!hasJs){w.gtag('js',new Date());}var hasConfig=w.dataLayer.some(function(entry){return entry&&entry[0]==='config'&&entry[1]===i;});if(!hasConfig){w.gtag('config',i,{'send_page_view':false});}})(window,document,<?php echo wp_json_encode($google_tag_id); ?>);
+        </script>
+        <?php
+    }
+
+    public function render_tracking_body(): void
+    {
+        if (is_admin()) {
+            return;
+        }
+
+        $settings = $this->general_settings->get_settings();
+        $tracking = $this->get_tracking_settings($settings);
+        $google_tag_id = (string) ($tracking['google_tag_id'] ?? '');
+
+        if (empty($tracking['enabled']) || !str_starts_with($google_tag_id, 'GTM-')) {
+            return;
+        }
+
+        $iframe_src = add_query_arg(['id' => $google_tag_id], 'https://www.googletagmanager.com/ns.html');
+        ?>
+        <noscript class="be-google-tag-manager-noscript">
+            <iframe src="<?php echo esc_url($iframe_src); ?>" height="0" width="0" style="display:none;visibility:hidden"></iframe>
+        </noscript>
+        <?php
     }
 
     public function render_custom_css(): void
@@ -221,6 +280,70 @@ class Frontend
         }
 
         return trim($css);
+    }
+
+    /**
+     * @param array<string, mixed> $settings
+     * @return array<string, mixed>
+     */
+    private function build_tracking_config(array $settings): array
+    {
+        $tracking = $this->get_tracking_settings($settings);
+        $config = [
+            'enabled' => (bool) ($tracking['enabled'] ?? false),
+            'googleTagId' => (string) ($tracking['google_tag_id'] ?? ''),
+            'currency' => 'USD',
+            'propertyView' => null,
+        ];
+
+        if (!$config['enabled'] || !is_singular(Property_Post_Type::POST_TYPE)) {
+            return $config;
+        }
+
+        $post_id = get_queried_object_id();
+        if (!is_numeric($post_id) || (int) $post_id <= 0) {
+            return $config;
+        }
+
+        $property_id = get_post_meta((int) $post_id, '_be_property_id', true);
+        $normalized_property_id = is_scalar($property_id) ? trim(sanitize_text_field((string) $property_id)) : '';
+        if ($normalized_property_id === '') {
+            $normalized_property_id = (string) (int) $post_id;
+        }
+
+        $title = get_the_title((int) $post_id);
+        $normalized_title = is_string($title) && trim($title) !== ''
+            ? trim(wp_strip_all_tags($title))
+            : __('Property', 'barefoot-engine');
+
+        $config['propertyView'] = [
+            'propertyId' => $normalized_property_id,
+            'propertySummary' => [
+                'propertyId' => $normalized_property_id,
+                'title' => $normalized_title,
+            ],
+            'currency' => 'USD',
+            'value' => 0,
+            'price' => 0,
+        ];
+
+        return $config;
+    }
+
+    /**
+     * @param array<string, mixed> $settings
+     * @return array{enabled: bool, google_tag_id: string}
+     */
+    private function get_tracking_settings(array $settings): array
+    {
+        $tracking = isset($settings['tracking']) && is_array($settings['tracking']) ? $settings['tracking'] : [];
+
+        return [
+            'enabled' => !empty($tracking['enabled']),
+            'google_tag_id' => isset($tracking['google_tag_id']) && is_string($tracking['google_tag_id'])
+                ? $tracking['google_tag_id']
+                : '',
+        ];
     }
 
     private function enqueue_script_entry(string $handle, string $entry_name): void

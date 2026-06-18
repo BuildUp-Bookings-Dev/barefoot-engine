@@ -1,4 +1,5 @@
 import { BPCalendar } from '@braudypedrosa/bp-calendar';
+import { trackBookingBeginCheckout } from './tracking.mjs';
 
 const BOOKING_CHECKOUT_SELECTOR = '[data-be-booking-checkout]';
 const QUOTE_DEBOUNCE_MS = 350;
@@ -1016,6 +1017,14 @@ function createCheckoutSession(state) {
       renderCheckoutTotals(state, payload.totals, payableAmount);
       renderCheckoutPaymentSchedule(state, depositAmount);
       openPaymentStep(state);
+      trackBookingBeginCheckout({
+        propertyId: state.propertyId,
+        propertySummary: payload.propertySummary || state.propertySummary,
+        checkIn: state.checkIn,
+        checkOut: state.checkOut,
+        guests: normalizeGuestCount(state.guestsSelect.value),
+        totals: payload.totals,
+      });
       syncCheckoutUrlParams(state);
       setCheckoutNotice(state, state.labels.sessionReady, 'success');
     })

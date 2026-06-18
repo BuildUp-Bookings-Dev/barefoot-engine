@@ -1,10 +1,11 @@
 {
   "name": "barefoot-engine",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "description": "Barefoot Engine WordPress plugin scaffold",
   "scripts": {
     "build": "vite build",
+    "test:tracking": "node --test tests/tracking.test.mjs",
     "check:naming": "node ./scripts/check-kebab-case.mjs",
     "watch": "vite build --watch",
     "package": "node ./scripts/package.mjs",

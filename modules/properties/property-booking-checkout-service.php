@@ -158,6 +158,7 @@ class Property_Booking_Checkout_Service
         $coordinates = $this->extract_confirmation_coordinates($property_summary);
         $property_title = $this->clean_string($property_summary['title'] ?? __('Property', 'barefoot-engine'));
         $property_address = $this->clean_string($property_summary['address'] ?? '');
+        $property_id = $this->clean_string($record['property_id'] ?? '');
         $folio_id = $this->clean_string($record['folio_id'] ?? '');
 
         $context = [
@@ -165,6 +166,7 @@ class Property_Booking_Checkout_Service
             'bookingRecordId' => $booking_record_id,
             'folioId' => $folio_id,
             'property' => [
+                'propertyId' => $property_id,
                 'title' => $property_title,
                 'address' => $property_address,
                 'imageUrl' => $this->clean_string($property_summary['imageUrl'] ?? ''),

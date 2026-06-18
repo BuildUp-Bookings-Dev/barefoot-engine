@@ -15,6 +15,7 @@ class General_Settings
     private const TYPOGRAPHY_FAMILY_FIELDS = ['header_font_family', 'label_font_family', 'body_font_family'];
     private const TYPOGRAPHY_SIZE_FIELDS = ['header_font_size', 'label_font_size', 'body_font_size'];
     private const MAX_CUSTOM_CSS_LENGTH = 20000;
+    private const MAX_GOOGLE_TAG_ID_LENGTH = 32;
 
     /**
      * @return array<string, mixed>
@@ -99,6 +100,16 @@ class General_Settings
                 }
             } else {
                 $settings['custom_css'] = $custom_css;
+            }
+        }
+
+        if (array_key_exists('tracking', $payload)) {
+            if (!is_array($payload['tracking'])) {
+                if ($strict) {
+                    $errors['tracking'] = __('Invalid tracking settings payload.', 'barefoot-engine');
+                }
+            } else {
+                $this->hydrate_tracking($settings, $errors, $payload['tracking'], $strict);
             }
         }
 
@@ -293,6 +304,10 @@ class General_Settings
                 'body_font_size' => null,
             ],
             'custom_css' => '',
+            'tracking' => [
+                'enabled' => false,
+                'google_tag_id' => '',
+            ],
         ];
     }
 
@@ -367,6 +382,32 @@ class General_Settings
 
             $settings['typography'][$size_key] = $normalized_size;
         }
+    }
+
+    /**
+     * @param array<string, mixed> $settings
+     * @param array<string, string> $errors
+     * @param array<string, mixed> $tracking
+     */
+    private function hydrate_tracking(array &$settings, array &$errors, array $tracking, bool $strict): void
+    {
+        if (array_key_exists('enabled', $tracking)) {
+            $settings['tracking']['enabled'] = $this->normalize_boolean($tracking['enabled']);
+        }
+
+        if (!array_key_exists('google_tag_id', $tracking)) {
+            return;
+        }
+
+        $google_tag_id = $this->normalize_google_tag_id($tracking['google_tag_id']);
+        if ($google_tag_id === null) {
+            if ($strict) {
+                $errors['tracking.google_tag_id'] = __('Enter a valid Google tag ID.', 'barefoot-engine');
+            }
+            return;
+        }
+
+        $settings['tracking']['google_tag_id'] = $google_tag_id;
     }
 
     private function normalize_hex(mixed $value): ?string
@@ -451,5 +492,44 @@ class General_Settings
         }
 
         return trim($css);
+    }
+
+    private function normalize_google_tag_id(mixed $value): ?string
+    {
+        if ($value === null) {
+            return '';
+        }
+
+        if (!is_scalar($value)) {
+            return null;
+        }
+
+        $tag_id = strtoupper(sanitize_text_field(trim((string) $value)));
+        if ($tag_id === '') {
+            return '';
+        }
+
+        if (strlen($tag_id) > self::MAX_GOOGLE_TAG_ID_LENGTH) {
+            return null;
+        }
+
+        return preg_match('/^(GTM|G|GT|AW|DC)-[A-Z0-9]+$/', $tag_id) === 1 ? $tag_id : null;
+    }
+
+    private function normalize_boolean(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value !== 0;
+        }
+
+        if (!is_scalar($value)) {
+            return false;
+        }
+
+        return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
     }
 }

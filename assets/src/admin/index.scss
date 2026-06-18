@@ -413,6 +413,19 @@ $be-border: #e2e8f0;
   margin: 0;
 }
 
+.be-tracking-toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  color: $be-text-main;
+  font-size: 14px;
+}
+
+.be-tracking-toggle input[type="checkbox"] {
+  margin: 0;
+}
+
 .be-field input[type="text"],
 .be-field input[type="password"],
 .be-field select,

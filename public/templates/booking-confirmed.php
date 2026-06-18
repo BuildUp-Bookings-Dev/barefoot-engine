@@ -16,14 +16,19 @@ $stay = is_array($context['stay'] ?? null) ? $context['stay'] : [];
 $payments = is_array($context['payments'] ?? null) ? $context['payments'] : [];
 $map = is_array($context['map'] ?? null) ? $context['map'] : [];
 $calendar = is_array($context['calendar'] ?? null) ? $context['calendar'] : [];
+$booking_record_id = is_scalar($context['bookingRecordId'] ?? null) ? trim((string) $context['bookingRecordId']) : '';
 $folio_id = is_scalar($context['folioId'] ?? null) ? trim((string) $context['folioId']) : '';
+$property_id = is_scalar($property['propertyId'] ?? null) ? trim((string) $property['propertyId']) : '';
 $property_permalink = is_scalar($property['permalink'] ?? null) ? trim((string) $property['permalink']) : '';
 $property_address = is_scalar($property['address'] ?? null) ? trim((string) $property['address']) : '';
+$check_in = is_scalar($stay['checkIn'] ?? null) ? trim((string) $stay['checkIn']) : '';
+$check_out = is_scalar($stay['checkOut'] ?? null) ? trim((string) $stay['checkOut']) : '';
 $check_in_display = is_scalar($stay['checkInDisplay'] ?? null) ? trim((string) $stay['checkInDisplay']) : '—';
 $check_out_display = is_scalar($stay['checkOutDisplay'] ?? null) ? trim((string) $stay['checkOutDisplay']) : '—';
 $guests_label = is_scalar($stay['guestsLabel'] ?? null) ? trim((string) $stay['guestsLabel']) : '—';
 $nights_label = is_scalar($stay['nightsLabel'] ?? null) ? trim((string) $stay['nightsLabel']) : '—';
 $rent_label = (string) ($payments['rentLabel'] ?? __('Rent', 'barefoot-engine'));
+$guests = isset($stay['guests']) && is_numeric($stay['guests']) ? max(1, (int) $stay['guests']) : 1;
 
 if (!empty($stay['nights']) && is_numeric($stay['nights'])) {
     $rent_label = sprintf(
@@ -60,8 +65,37 @@ $format_money = static function (mixed $value): string {
     return '$' . number_format((float) $value, 2, '.', ',');
 };
 
+$tracking_money = static function (mixed $value): float {
+    return is_numeric($value) ? (float) $value : 0.0;
+};
+
+$transaction_id = $folio_id !== '' ? $folio_id : ($booking_record_id !== '' ? 'booking-' . $booking_record_id : '');
+$purchase_tracking_context = [];
+
+if ($is_valid && $transaction_id !== '') {
+    $purchase_tracking_context = [
+        'transactionId' => $transaction_id,
+        'propertyId' => $property_id,
+        'propertySummary' => [
+            'propertyId' => $property_id,
+            'title' => (string) ($property['title'] ?? __('Property', 'barefoot-engine')),
+        ],
+        'checkIn' => $check_in,
+        'checkOut' => $check_out,
+        'guests' => $guests,
+        'payments' => [
+            'rent' => $tracking_money($payments['rent'] ?? null),
+            'tax' => $tracking_money($payments['tax'] ?? null),
+            'total' => $tracking_money($payments['total'] ?? null),
+        ],
+    ];
+}
+
 get_header();
 ?>
+<?php if (!empty($purchase_tracking_context)) : ?>
+    <script type="application/json" data-be-booking-purchase-tracking><?php echo wp_json_encode($purchase_tracking_context); ?></script>
+<?php endif; ?>
 <main class="barefoot-engine-public barefoot-engine-booking-confirmed">
     <div class="barefoot-engine-booking-confirmed__container">
         <?php if ($is_valid) : ?>

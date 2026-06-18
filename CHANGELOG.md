@@ -12,6 +12,22 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
+## [1.0.5] - 2026-06-19
+
+### Added
+
+- Added configurable GA4/GTM booking tracking for `view_item`, `begin_checkout`, and `purchase` events.
+- Added a General Tracking settings screen for the Google tag destination.
+- Added tracking tests for GA4 ecommerce payloads and direct Measurement ID dispatch.
+
+### Changed
+
+- Reused matching existing Google tags before embedding the configured booking tracking tag.
+
+### Fixed
+
+### Security
+
 ## [1.0.4] - 2026-05-27
 
 ### Added

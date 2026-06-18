@@ -136,6 +136,14 @@ const normalizeFontFamily = (value, fontOptions) => {
   return value;
 };
 
+const sanitizeGoogleTagId = (value) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.trim().toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 32);
+};
+
 export default function generalSettingsForm() {
   return {
     colors: {
@@ -152,6 +160,10 @@ export default function generalSettingsForm() {
       body_font_size: null,
     },
     customCss: '',
+    tracking: {
+      enabled: false,
+      google_tag_id: '',
+    },
     fontOptions: [],
     config: {
       min: 12,
@@ -210,6 +222,7 @@ export default function generalSettingsForm() {
 
       const colors = settings.colors && typeof settings.colors === 'object' ? settings.colors : {};
       const typography = settings.typography && typeof settings.typography === 'object' ? settings.typography : {};
+      const tracking = settings.tracking && typeof settings.tracking === 'object' ? settings.tracking : {};
 
       this.colors.primary = safeHexColor(colors.primary, '#111111');
       this.colors.secondary = safeHexColor(colors.secondary, '#64748b');
@@ -217,6 +230,8 @@ export default function generalSettingsForm() {
 
       this.hydrateTypography(typography);
       this.customCss = typeof settings.custom_css === 'string' ? settings.custom_css : '';
+      this.tracking.enabled = tracking.enabled === true;
+      this.tracking.google_tag_id = sanitizeGoogleTagId(tracking.google_tag_id);
     },
 
     hydrateTypography(typography) {
@@ -348,6 +363,7 @@ export default function generalSettingsForm() {
 
       const colors = settings.colors && typeof settings.colors === 'object' ? settings.colors : {};
       const typography = settings.typography && typeof settings.typography === 'object' ? settings.typography : {};
+      const tracking = settings.tracking && typeof settings.tracking === 'object' ? settings.tracking : {};
 
       this.colors.primary = safeHexColor(colors.primary, this.colors.primary);
       this.colors.secondary = safeHexColor(colors.secondary, this.colors.secondary);
@@ -355,6 +371,8 @@ export default function generalSettingsForm() {
 
       this.hydrateTypography(typography);
       this.customCss = typeof settings.custom_css === 'string' ? settings.custom_css : this.customCss;
+      this.tracking.enabled = tracking.enabled === true;
+      this.tracking.google_tag_id = sanitizeGoogleTagId(tracking.google_tag_id);
     },
 
     async saveSettings() {
@@ -365,21 +383,11 @@ export default function generalSettingsForm() {
       this.isSaving = true;
 
       try {
-        const typographyPayload = {};
-
-        TYPOGRAPHY_ROLES.forEach((role) => {
-          typographyPayload[this.getFamilyField(role)] = this.typography[this.getFamilyField(role)];
-          typographyPayload[this.getSizeField(role)] = this.typography[this.getSizeField(role)];
-        });
-
         const payload = {
-          colors: {
-            primary: this.colors.primary,
-            secondary: this.colors.secondary,
-            accent: this.colors.accent,
+          tracking: {
+            enabled: this.tracking.enabled,
+            google_tag_id: sanitizeGoogleTagId(this.tracking.google_tag_id),
           },
-          typography: typographyPayload,
-          custom_css: this.customCss,
         };
 
         const response = await requestJson('general-settings', {

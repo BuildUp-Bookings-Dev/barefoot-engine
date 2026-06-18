@@ -27,6 +27,11 @@ if (!defined('ABSPATH')) {
                     <td><?php echo esc_html__('Confirm the connection test passes and credentials are valid before syncing data.', 'barefoot-engine'); ?></td>
                 </tr>
                 <tr>
+                    <td><code><?php echo esc_html__('General', 'barefoot-engine'); ?></code></td>
+                    <td><?php echo esc_html__('Manage booking analytics tracking.', 'barefoot-engine'); ?></td>
+                    <td><?php echo esc_html__('Enter the GA4 Measurement ID or GTM container ID in Tracking when booking events should be sent to Google Analytics.', 'barefoot-engine'); ?></td>
+                </tr>
+                <tr>
                     <td><code><?php echo esc_html__('Properties', 'barefoot-engine'); ?></code></td>
                     <td><?php echo esc_html__('Import, review, and manage synced properties.', 'barefoot-engine'); ?></td>
                     <td><?php echo esc_html__('Review property records after syncing and confirm recent changes are present.', 'barefoot-engine'); ?></td>

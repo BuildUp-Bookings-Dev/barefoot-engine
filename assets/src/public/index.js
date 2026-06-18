@@ -3,6 +3,7 @@ import listingsMapModule from './bp-listings-runtime.js';
 import { bootBookingCheckoutWidgets } from './booking-checkout.js';
 import { bootFeaturedProperties } from './featured-properties.js';
 import { bootPropertyGrid } from './property-grid.js';
+import { bootBookingTracking } from './tracking.mjs';
 import { BPSearchWidget, BP_SearchWidget } from '@braudypedrosa/bp-search-widget';
 
 const SEARCH_WIDGET_SELECTOR = '[data-be-search-widget]';
@@ -3290,6 +3291,7 @@ if (document.readyState === 'loading') {
       bootBookingCheckoutWidgets();
       bootFeaturedProperties();
       bootPropertyGrid();
+      bootBookingTracking();
     },
     { once: true },
   );
@@ -3301,4 +3303,5 @@ if (document.readyState === 'loading') {
   bootBookingCheckoutWidgets();
   bootFeaturedProperties();
   bootPropertyGrid();
+  bootBookingTracking();
 }
