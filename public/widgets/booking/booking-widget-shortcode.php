@@ -2,6 +2,7 @@
 
 namespace BarefootEngine\Widgets\Booking;
 
+use BarefootEngine\Properties\Property_Booking_Service;
 use BarefootEngine\Properties\Property_Post_Type;
 
 if (!defined('ABSPATH')) {
@@ -27,10 +28,15 @@ class Booking_Widget_Shortcode
     ];
 
     private Booking_Widget_Preset_Registry $preset_registry;
+    private Property_Booking_Service $booking_service;
 
-    public function __construct(?Booking_Widget_Preset_Registry $preset_registry = null)
+    public function __construct(
+        ?Booking_Widget_Preset_Registry $preset_registry = null,
+        ?Property_Booking_Service $booking_service = null
+    )
     {
         $this->preset_registry = $preset_registry ?? new Booking_Widget_Preset_Registry();
+        $this->booking_service = $booking_service ?? new Property_Booking_Service();
     }
 
     public function register(): void
@@ -63,6 +69,11 @@ class Booking_Widget_Shortcode
 
         $resolved_property_id = $this->resolve_property_id($attribute_property_id);
         $config['propertyId'] = $resolved_property_id;
+
+        $initial_calendar = $this->build_initial_calendar_context($resolved_property_id, $config);
+        if ($initial_calendar !== []) {
+            $config['initialCalendar'] = $initial_calendar;
+        }
 
         if ($resolved_property_id === '') {
             $config['missingContext'] = true;
@@ -149,6 +160,78 @@ class Booking_Widget_Shortcode
         }
 
         return trim(sanitize_text_field((string) $property_id));
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    private function build_initial_calendar_context(string $property_id, array $config): array
+    {
+        if ($property_id === '') {
+            return [];
+        }
+
+        $range = $this->resolve_initial_calendar_range($config);
+        if ($range === null) {
+            return [];
+        }
+
+        $daily_prices = $this->booking_service->get_daily_prices_for_range(
+            $property_id,
+            $range['month_start'],
+            $range['month_end']
+        );
+        if (is_wp_error($daily_prices) || $daily_prices === []) {
+            return [];
+        }
+
+        return [
+            'monthStart' => $range['month_start'],
+            'monthEnd' => $range['month_end'],
+            'dailyPrices' => $daily_prices,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     * @return array{month_start: string, month_end: string}|null
+     */
+    private function resolve_initial_calendar_range(array $config): ?array
+    {
+        $months_to_show = isset($config['calendarOptions']['monthsToShow']) && is_numeric($config['calendarOptions']['monthsToShow'])
+            ? (int) $config['calendarOptions']['monthsToShow']
+            : 2;
+        $months_to_show = max(1, min(6, $months_to_show));
+        $seed_date = $this->read_initial_calendar_seed_date();
+        $seed = \DateTimeImmutable::createFromFormat('!Y-m-d', $seed_date, wp_timezone());
+        if (!$seed instanceof \DateTimeImmutable) {
+            return null;
+        }
+
+        $month_start = $seed->modify('first day of this month');
+        $month_end = $month_start
+            ->modify('+' . ($months_to_show - 1) . ' months')
+            ->modify('last day of this month');
+
+        return [
+            'month_start' => $month_start->format('Y-m-d'),
+            'month_end' => $month_end->format('Y-m-d'),
+        ];
+    }
+
+    private function read_initial_calendar_seed_date(): string
+    {
+        $raw_check_in = '';
+        if (isset($_GET['check_in'])) {
+            $raw_check_in = sanitize_text_field(wp_unslash((string) $_GET['check_in']));
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw_check_in) === 1 && strtotime($raw_check_in) !== false) {
+            return $raw_check_in;
+        }
+
+        return wp_date('Y-m-d');
     }
 
     /**

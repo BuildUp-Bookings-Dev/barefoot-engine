@@ -316,6 +316,9 @@ class Frontend
             ? trim(wp_strip_all_tags($title))
             : __('Property', 'barefoot-engine');
 
+        $daily_rate = $this->resolve_property_daily_rate((int) $post_id);
+        $tracking_price = $daily_rate !== null ? $daily_rate : 0.0;
+
         $config['propertyView'] = [
             'propertyId' => $normalized_property_id,
             'propertySummary' => [
@@ -323,11 +326,174 @@ class Frontend
                 'title' => $normalized_title,
             ],
             'currency' => 'USD',
-            'value' => 0,
-            'price' => 0,
+            'value' => $tracking_price,
+            'price' => $tracking_price,
         ];
 
         return $config;
+    }
+
+    private function resolve_property_daily_rate(int $post_id): ?float
+    {
+        $rates = get_post_meta($post_id, '_be_property_rates', true);
+        if (!is_array($rates) || $rates === []) {
+            return null;
+        }
+
+        $today = wp_date('Y-m-d');
+        $daily_rate = $this->find_property_rate_for_date($rates, $today) ?? $this->find_property_starting_rate($rates);
+        if ($daily_rate === null) {
+            return null;
+        }
+
+        $amount = $this->normalize_tracking_money($daily_rate['amount'] ?? $daily_rate['rent'] ?? null);
+
+        return $amount !== null && $amount > 0 ? $amount : null;
+    }
+
+    /**
+     * @param array<string, mixed> $rates
+     * @return array<string, mixed>|null
+     */
+    private function find_property_rate_for_date(array $rates, string $target_date): ?array
+    {
+        $daily_rates = isset($rates['by_type']['daily']) && is_array($rates['by_type']['daily'])
+            ? $rates['by_type']['daily']
+            : [];
+
+        foreach ($daily_rates as $rate) {
+            if (is_array($rate) && $this->matches_property_rate_window($rate, $target_date)) {
+                return $rate;
+            }
+        }
+
+        $weekend_rates = isset($rates['by_type']['weekendany']) && is_array($rates['by_type']['weekendany'])
+            ? $rates['by_type']['weekendany']
+            : [];
+
+        foreach ($weekend_rates as $rate) {
+            if (
+                is_array($rate)
+                && $this->matches_property_rate_window($rate, $target_date)
+                && $this->matches_property_weekend_range($rate, $target_date)
+            ) {
+                return $rate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $rates
+     * @return array<string, mixed>|null
+     */
+    private function find_property_starting_rate(array $rates): ?array
+    {
+        $candidates = [];
+
+        foreach (['daily', 'weekendany'] as $rate_type) {
+            $typed_rates = isset($rates['by_type'][$rate_type]) && is_array($rates['by_type'][$rate_type])
+                ? $rates['by_type'][$rate_type]
+                : [];
+
+            foreach ($typed_rates as $rate) {
+                if (!is_array($rate)) {
+                    continue;
+                }
+
+                $amount = $this->normalize_tracking_money($rate['amount'] ?? $rate['rent'] ?? null);
+                if ($amount === null || $amount <= 0) {
+                    continue;
+                }
+
+                $rate['amount'] = $amount;
+                $candidates[] = $rate;
+            }
+        }
+
+        if ($candidates === []) {
+            return null;
+        }
+
+        usort(
+            $candidates,
+            static function (array $left, array $right): int {
+                return ((float) ($left['amount'] ?? 0)) <=> ((float) ($right['amount'] ?? 0));
+            }
+        );
+
+        return $candidates[0] ?? null;
+    }
+
+    private function normalize_tracking_money(mixed $value): ?float
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        return round((float) $value, 2);
+    }
+
+    /**
+     * @param array<string, mixed> $rate
+     */
+    private function matches_property_rate_window(array $rate, string $target_date): bool
+    {
+        $start = isset($rate['date_start']) && is_string($rate['date_start']) ? trim($rate['date_start']) : '';
+        $end = isset($rate['date_end']) && is_string($rate['date_end']) ? trim($rate['date_end']) : '';
+
+        if (!$this->is_valid_tracking_date($start) || !$this->is_valid_tracking_date($end)) {
+            return false;
+        }
+
+        return $target_date >= $start && $target_date <= $end;
+    }
+
+    /**
+     * @param array<string, mixed> $rate
+     */
+    private function matches_property_weekend_range(array $rate, string $target_date): bool
+    {
+        $week_start = isset($rate['wk_b']) && is_scalar($rate['wk_b']) ? $this->normalize_tracking_weekday((string) $rate['wk_b']) : null;
+        $week_end = isset($rate['wk_e']) && is_scalar($rate['wk_e']) ? $this->normalize_tracking_weekday((string) $rate['wk_e']) : null;
+
+        if ($week_start === null || $week_end === null) {
+            return false;
+        }
+
+        $target_weekday = (int) wp_date('w', strtotime($target_date . ' 00:00:00'));
+
+        if ($week_start <= $week_end) {
+            return $target_weekday >= $week_start && $target_weekday <= $week_end;
+        }
+
+        return $target_weekday >= $week_start || $target_weekday <= $week_end;
+    }
+
+    private function normalize_tracking_weekday(string $value): ?int
+    {
+        $normalized = strtolower(substr(trim($value), 0, 3));
+        if ($normalized === '') {
+            return null;
+        }
+
+        $map = [
+            'sun' => 0,
+            'mon' => 1,
+            'tue' => 2,
+            'wed' => 3,
+            'thu' => 4,
+            'fri' => 5,
+            'sat' => 6,
+        ];
+
+        return $map[$normalized] ?? null;
+    }
+
+    private function is_valid_tracking_date(string $value): bool
+    {
+        return (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $value);
     }
 
     /**

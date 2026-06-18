@@ -4,7 +4,7 @@ Tags: vacation-rental, integrations
 Requires at least: 6.5
 Tested up to: 6.6
 Requires PHP: 8.1
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -18,6 +18,11 @@ Barefoot Engine connects WordPress with the Barefoot API for vacation rental wor
 2. Activate Barefoot Engine.
 
 == Changelog ==
+= 1.0.6 =
+* Updated `view_item` tracking to use the property's current daily rate when available.
+* Preloaded the booking calendar's first visible price labels from synced rates so prices render immediately while live availability refreshes.
+* Fixed date-only property searches so they filter against live availability.
+
 = 1.0.5 =
 * Added configurable GA4/GTM booking event tracking for property views, checkout starts, and completed bookings.
 * Reused an existing matching Google tag when present and only embedded the configured tag when needed.

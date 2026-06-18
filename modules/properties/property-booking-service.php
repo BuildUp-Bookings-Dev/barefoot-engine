@@ -183,6 +183,50 @@ class Property_Booking_Service
     }
 
     /**
+     * @return array<string, float>|WP_Error
+     */
+    public function get_daily_prices_for_range(string $property_id, string $month_start, string $month_end): array|WP_Error
+    {
+        $normalized_property_id = $this->normalize_property_id($property_id);
+        if ($normalized_property_id === '') {
+            return new WP_Error(
+                'barefoot_engine_booking_missing_property_id',
+                __('A valid Barefoot Property ID is required.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        $normalized_month_start = $this->normalize_ymd_date($month_start);
+        $normalized_month_end = $this->normalize_ymd_date($month_end);
+        if ($normalized_month_start === '' || $normalized_month_end === '') {
+            return new WP_Error(
+                'barefoot_engine_booking_invalid_calendar_range',
+                __('A valid month date range is required.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        if ($normalized_month_end < $normalized_month_start) {
+            return new WP_Error(
+                'barefoot_engine_booking_invalid_calendar_range',
+                __('The month end date must be after the month start date.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        $range_days = $this->calculate_date_diff_days($normalized_month_start, $normalized_month_end);
+        if ($range_days < 0 || $range_days > self::MAX_CALENDAR_RANGE_DAYS) {
+            return new WP_Error(
+                'barefoot_engine_booking_invalid_calendar_range',
+                __('The requested calendar range is too large.', 'barefoot-engine'),
+                ['status' => 400]
+            );
+        }
+
+        return $this->build_daily_prices($normalized_property_id, $normalized_month_start, $normalized_month_end);
+    }
+
+    /**
      * @return array<string, mixed>|WP_Error
      */
     public function get_quote_data(

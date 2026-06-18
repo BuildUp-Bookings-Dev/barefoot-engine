@@ -12,6 +12,21 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 
+## [1.0.6] - 2026-06-19
+
+### Added
+
+### Changed
+
+- Updated `view_item` tracking to use the property's current daily rate when available.
+- Preloaded the booking calendar's first visible price labels from synced rates so prices render immediately while live availability refreshes.
+
+### Fixed
+
+- Fixed date-only property searches so they run live availability filtering instead of showing locally priced but unavailable units.
+
+### Security
+
 ## [1.0.5] - 2026-06-19
 
 ### Added

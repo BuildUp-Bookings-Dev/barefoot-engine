@@ -471,6 +471,7 @@ function appendPayloadValue(target, rawKey, value) {
 
 function hasSearchPayload(payload) {
   return !isEmptyValue(payload?.location)
+    || hasValidDateRangePayload(payload)
     || hasNonEmptyPayloadEntries(payload?.customFields)
     || hasNonEmptyPayloadEntries(payload?.filters);
 }
@@ -2161,6 +2162,7 @@ function initializeBookingWidget(mountNode, config) {
     return;
   }
 
+  const initialDateConfig = applyInitialBookingCalendarPrices(state, runtime.initialCalendar);
   const selectedRange = initialSearch.checkIn && initialSearch.checkOut
     ? {
       start: parseYmdDate(initialSearch.checkIn),
@@ -2177,7 +2179,7 @@ function initializeBookingWidget(mountNode, config) {
     showTooltip: runtime.calendarOptions.showTooltip,
     showClearButton: runtime.calendarOptions.showClearButton,
     selectedRange: selectedRange?.start instanceof Date && selectedRange?.end instanceof Date ? selectedRange : null,
-    dateConfig: {},
+    dateConfig: initialDateConfig,
     onRangeSelect: (range) => {
       handleBookingRangeSelect(state, range);
     },
@@ -2210,6 +2212,35 @@ function initializeBookingWidget(mountNode, config) {
   });
 }
 
+function applyInitialBookingCalendarPrices(state, initialCalendar) {
+  const dateConfig = {};
+  if (!state || !isPlainObject(initialCalendar) || !isPlainObject(initialCalendar.dailyPrices)) {
+    return dateConfig;
+  }
+
+  Object.entries(initialCalendar.dailyPrices).forEach(([dateKey, amountValue]) => {
+    const normalized = normalizeDateInput(dateKey);
+    const amount = Number(amountValue);
+    if (
+      !isValidDateString(normalized)
+      || normalized < initialCalendar.monthStart
+      || normalized > initialCalendar.monthEnd
+      || !Number.isFinite(amount)
+      || amount <= 0
+    ) {
+      return;
+    }
+
+    state.dailyPrices.set(normalized, amount);
+    dateConfig[normalized] = {
+      date: normalized,
+      price: formatBookingCalendarPrice(amount, state.currency),
+    };
+  });
+
+  return dateConfig;
+}
+
 function parseBookingHandoffFromSearch(search) {
   const params = new URLSearchParams(search || '');
 
@@ -2227,6 +2258,7 @@ function buildBookingRuntime(config) {
   const redirectUrl = sanitizeBookingRedirectUrl(config?.redirectUrl);
   const reztypeid = sanitizeBookingReztypeid(config?.reztypeid, 26);
   const calendarOptions = sanitizeBookingCalendarOptions(config?.calendarOptions);
+  const initialCalendar = sanitizeInitialBookingCalendar(config?.initialCalendar);
   const labels = buildBookingLabels(config?.labels);
   const guestsLabel = sanitizeBookingText(config?.guests?.label, 'Guests');
   const guestsPlaceholder = sanitizeBookingText(config?.guests?.placeholder, '');
@@ -2242,6 +2274,7 @@ function buildBookingRuntime(config) {
     redirectUrl,
     reztypeid,
     calendarOptions,
+    initialCalendar,
     labels,
     guestOptions,
     defaultGuestValue,
@@ -2822,6 +2855,42 @@ function sanitizeBookingCalendarOptions(calendarOptions) {
     tooltipLabel: sanitizeBookingText(options.tooltipLabel, 'Nights'),
     showTooltip: options.showTooltip !== false,
     showClearButton: options.showClearButton !== false,
+  };
+}
+
+function sanitizeInitialBookingCalendar(value) {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+
+  const monthStart = normalizeDateInput(value.monthStart);
+  const monthEnd = normalizeDateInput(value.monthEnd);
+  if (!isValidDateString(monthStart) || !isValidDateString(monthEnd) || monthEnd < monthStart) {
+    return null;
+  }
+
+  const rawDailyPrices = isPlainObject(value.dailyPrices) ? value.dailyPrices : {};
+  const dailyPrices = {};
+  Object.entries(rawDailyPrices).forEach(([dateKey, amountValue]) => {
+    const normalized = normalizeDateInput(dateKey);
+    const amount = Number(amountValue);
+    if (
+      !isValidDateString(normalized)
+      || normalized < monthStart
+      || normalized > monthEnd
+      || !Number.isFinite(amount)
+      || amount <= 0
+    ) {
+      return;
+    }
+
+    dailyPrices[normalized] = amount;
+  });
+
+  return {
+    monthStart,
+    monthEnd,
+    dailyPrices,
   };
 }
 

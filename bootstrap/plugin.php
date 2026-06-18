@@ -8,6 +8,7 @@ use BarefootEngine\Properties\Property_Admin_Actions;
 use BarefootEngine\Properties\Property_Availability_Service;
 use BarefootEngine\Properties\Property_Booking_Checkout_Service;
 use BarefootEngine\Properties\Property_Booking_Records;
+use BarefootEngine\Properties\Property_Booking_Service;
 use BarefootEngine\Properties\Property_Delta_Refresh_Service;
 use BarefootEngine\Properties\Property_Listings_Provider;
 use BarefootEngine\Properties\Property_Metaboxes;
@@ -51,6 +52,7 @@ class Plugin
     private ?Property_Sync_Service $property_sync_service = null;
     private ?Property_Availability_Service $property_availability_service = null;
     private ?Property_Delta_Refresh_Service $property_delta_refresh_service = null;
+    private ?Property_Booking_Service $property_booking_service = null;
     private ?Property_Booking_Checkout_Service $property_booking_checkout_service = null;
     private ?Property_Booking_Records $property_booking_records = null;
 
@@ -93,7 +95,10 @@ class Plugin
         $featured_properties_shortcode = new Featured_Properties_Shortcode($property_listings_provider);
         $property_grid_shortcode = new Property_Grid_Shortcode($property_listings_provider);
         $shortcode = new Search_Widget_Shortcode($search_preset_registry);
-        $booking_shortcode = new Booking_Widget_Shortcode($booking_preset_registry);
+        $booking_shortcode = new Booking_Widget_Shortcode(
+            $booking_preset_registry,
+            $this->get_property_booking_service()
+        );
         $booking_checkout_shortcode = new Booking_Checkout_Shortcode(
             $booking_checkout_preset_registry,
             $this->get_property_booking_checkout_service()
@@ -134,7 +139,7 @@ class Plugin
         $delta_refresh_service = $this->get_property_delta_refresh_service();
         $properties_controller = new Properties_Controller($this->get_property_sync_service(), $delta_refresh_service);
         $availability_controller = new Property_Availability_Controller($this->get_property_availability_service(), $delta_refresh_service);
-        $booking_controller = new Property_Booking_Controller();
+        $booking_controller = new Property_Booking_Controller($this->get_property_booking_service());
         $booking_checkout_controller = new Property_Booking_Checkout_Controller($this->get_property_booking_checkout_service());
 
         $this->loader->add_action('rest_api_init', $controller, 'register_routes', 10, 0);
@@ -253,6 +258,18 @@ class Plugin
         }
 
         return $this->property_delta_refresh_service;
+    }
+
+    private function get_property_booking_service(): Property_Booking_Service
+    {
+        if (!$this->property_booking_service instanceof Property_Booking_Service) {
+            $this->property_booking_service = new Property_Booking_Service(
+                $this->get_api_client(),
+                $this->get_api_settings()
+            );
+        }
+
+        return $this->property_booking_service;
     }
 
     private function get_property_booking_checkout_service(): Property_Booking_Checkout_Service
